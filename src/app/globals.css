@@ -11,6 +11,7 @@
   --warn: #d97a5c;
   --warn-bg: #3a2620;
   --line: #3a3860;
+  --danger: #e05c5c;
 }
 
 * {
@@ -36,12 +37,38 @@ header {
   margin-bottom: 36px;
 }
 
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .eyebrow {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12.5px;
   color: var(--thread);
   letter-spacing: 0.02em;
-  margin-bottom: 10px;
+}
+
+.logout-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.logout-btn:hover {
+  border-color: var(--warn);
+  color: var(--warn);
+  filter: none;
 }
 
 h1 {
@@ -62,6 +89,15 @@ h1 em {
   font-size: 15px;
   max-width: 520px;
   line-height: 1.5;
+}
+
+.inline-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--thread);
+  background: rgba(212, 166, 87, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
 }
 
 /* ── Thread map ── */
@@ -103,7 +139,7 @@ h1 em {
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
+  50%       { opacity: 0.55; }
 }
 
 .sep {
@@ -119,11 +155,29 @@ h1 em {
   margin-bottom: 20px;
 }
 
+.card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .card-label {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11.5px;
   color: var(--text-dim);
-  margin-bottom: 12px;
+}
+
+.card-node-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--thread);
+  background: rgba(212, 166, 87, 0.1);
+  border: 1px solid var(--thread-dim);
+  padding: 3px 10px;
+  border-radius: 12px;
 }
 
 .problem {
@@ -153,11 +207,16 @@ input[type="text"] {
   color: var(--text);
   font-family: 'JetBrains Mono', monospace;
   font-size: 15px;
+  transition: border-color 0.2s;
 }
 
 input[type="text"]:focus {
   outline: none;
   border-color: var(--thread);
+}
+
+input[type="text"]:disabled {
+  opacity: 0.5;
 }
 
 button {
@@ -170,10 +229,11 @@ button {
   font-weight: 600;
   font-size: 14.5px;
   cursor: pointer;
-  transition: filter 0.2s;
+  transition: filter 0.2s, opacity 0.2s;
+  white-space: nowrap;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   filter: brightness(1.08);
 }
 
@@ -182,9 +242,15 @@ button:disabled {
   cursor: default;
 }
 
-.hint {
-  font-size: 12.5px;
-  color: var(--text-dim);
+/* ── Service error ── */
+.service-error {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: rgba(224, 92, 92, 0.12);
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  color: var(--danger);
+  font-size: 13.5px;
 }
 
 /* ── Feedback ── */
@@ -211,16 +277,11 @@ button:disabled {
   font-size: 11px;
   display: block;
   margin-bottom: 6px;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
-.feedback.ok .tag {
-  color: var(--ok);
-}
-
-.feedback.warn .tag {
-  color: var(--warn);
-}
+.feedback.ok .tag  { color: var(--ok); }
+.feedback.warn .tag { color: var(--warn); }
 
 .feedback p {
   margin: 0;
@@ -240,17 +301,14 @@ button:disabled {
 
 /* ── Architecture note ── */
 .architecture {
-  margin-top: 6px;
+  margin-top: 18px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-dim);
   display: flex;
   gap: 14px;
   flex-wrap: wrap;
-}
-
-.architecture span {
-  opacity: 0.75;
+  opacity: 0.7;
 }
 
 .architecture b {
@@ -265,4 +323,132 @@ footer {
   color: var(--text-dim);
   border-top: 1px solid var(--line);
   padding-top: 16px;
+}
+
+/* ════════════════════════════════════════════════════════════
+   LOGIN PAGE
+   ════════════════════════════════════════════════════════════ */
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 480px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 44px 40px 36px;
+}
+
+.login-brand {
+  margin-bottom: 36px;
+}
+
+.login-brand .eyebrow {
+  margin-bottom: 12px;
+}
+
+.login-brand h1 {
+  font-size: 1.85rem;
+  margin-bottom: 10px;
+}
+
+.login-brand .sub {
+  font-size: 14.5px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.login-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.login-input {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 20px;
+  letter-spacing: 0.05em;
+  text-align: center;
+  transition: border-color 0.2s;
+  margin-bottom: 12px;
+}
+
+.login-input:focus {
+  outline: none;
+  border-color: var(--thread);
+}
+
+.login-error {
+  background: rgba(217, 122, 92, 0.15);
+  border: 1px solid var(--warn);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--warn);
+  font-size: 13.5px;
+  margin-bottom: 12px;
+}
+
+.login-btn {
+  background: var(--thread);
+  color: var(--ink);
+  padding: 14px 24px;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  transition: filter 0.2s, opacity 0.2s;
+}
+
+.login-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.login-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.login-hint {
+  margin-top: 24px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.login-hint code {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--thread);
+  background: rgba(212, 166, 87, 0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+@media (max-width: 520px) {
+  .login-card {
+    padding: 32px 24px 28px;
+  }
+  .login-brand h1 {
+    font-size: 1.6rem;
+  }
 }

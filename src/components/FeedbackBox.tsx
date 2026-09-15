@@ -1,5 +1,9 @@
 "use client";
 
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+
 interface FeedbackBoxProps {
   state: "hidden" | "ok" | "warn";
   tag: string;
@@ -13,15 +17,20 @@ export default function FeedbackBox({ state, tag, text, loading }: FeedbackBoxPr
   return (
     <div className={`feedback ${state === "ok" ? "ok" : "warn"}`}>
       <span className="tag">{tag}</span>
-      <p>
+      <div className="feedback-content" style={{ marginTop: "8px", lineHeight: "1.4" }}>
         {loading ? (
-          <>
+          <p>
             Redactando retroalimentación<span className="loading-dots" />
-          </>
+          </p>
         ) : (
-          text
+          <ReactMarkdown
+            remarkPlugins={[remarkMath]}
+            rehypePlugins={[rehypeKatex]}
+          >
+            {text}
+          </ReactMarkdown>
         )}
-      </p>
+      </div>
     </div>
   );
 }
