@@ -41,11 +41,11 @@ export async function POST(req: NextRequest) {
   const groupId = inferGroupFromCode(code);
 
   // Buscar estudiante existente o crear uno nuevo (upsert por código)
-  const { data: existing } = await supabase
+  const { data: existing, error: selectError } = await supabase
     .from("students")
     .select("id, group_id")
     .eq("code", code)
-    .single();
+    .maybeSingle();
 
   if (existing) {
     return NextResponse.json({ studentId: existing.id, groupId: existing.group_id });
@@ -59,9 +59,9 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error || !created) {
-    console.error("[Ariadna/login] Error al crear estudiante:", error);
+    console.error("[Ariadna/login] Error al crear/verificar estudiante:", error || selectError);
     return NextResponse.json(
-      { error: "No se pudo registrar el código. Intenta de nuevo." },
+      { error: `Error DB: ${error?.message || selectError?.message || "Desconocido"}. Asegúrate de que los IDs del grupo 1, 2 y 3 existan en la tabla groups.` },
       { status: 500 }
     );
   }
