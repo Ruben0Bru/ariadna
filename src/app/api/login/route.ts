@@ -25,13 +25,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+
   // ── Modo offline: sin Supabase configurado ────────────────────────────────
   if (!supabaseUrl || !supabaseKey) {
     const groupId = inferGroupFromCode(code);
-    // En modo offline el studentId es el propio código
     return NextResponse.json({
       studentId: code,
       groupId,
+      masteredNodes: [],
       offline: true,
     });
   }
@@ -47,24 +48,41 @@ export async function POST(req: NextRequest) {
     .eq("code", code)
     .maybeSingle();
 
+  let studentId: string;
+  let resolvedGroupId: number;
+
   if (existing) {
-    return NextResponse.json({ studentId: existing.id, groupId: existing.group_id });
+    studentId = existing.id;
+    resolvedGroupId = existing.group_id;
+  } else {
+    // Crear nuevo estudiante
+    const { data: created, error } = await supabase
+      .from("students")
+      .insert({ code, group_id: groupId })
+      .select("id, group_id")
+      .single();
+
+    if (error || !created) {
+      console.error("[Ariadna/login] Error al crear estudiante:", error || selectError);
+      return NextResponse.json(
+        { error: `Error DB: ${error?.message || selectError?.message || "Desconocido"}. Verifica que las tablas y grupos estén creados en Supabase.` },
+        { status: 500 }
+      );
+    }
+    studentId = created.id;
+    resolvedGroupId = created.group_id;
   }
 
-  // Crear nuevo estudiante
-  const { data: created, error } = await supabase
-    .from("students")
-    .insert({ code, group_id: groupId })
-    .select("id, group_id")
-    .single();
+  // RF-18: Cargar nodos ya dominados en sesiones anteriores
+  const { data: masterAttempts } = await supabase
+    .from("attempts")
+    .select("node_id")
+    .eq("student_id", studentId)
+    .eq("is_correct", true);
 
-  if (error || !created) {
-    console.error("[Ariadna/login] Error al crear/verificar estudiante:", error || selectError);
-    return NextResponse.json(
-      { error: `Error DB: ${error?.message || selectError?.message || "Desconocido"}. Asegúrate de que los IDs del grupo 1, 2 y 3 existan en la tabla groups.` },
-      { status: 500 }
-    );
-  }
+  const masteredNodes = masterAttempts
+    ? [...new Set(masterAttempts.map((a: { node_id: string }) => a.node_id))]
+    : [];
 
-  return NextResponse.json({ studentId: created.id, groupId: created.group_id });
+  return NextResponse.json({ studentId, groupId: resolvedGroupId, masteredNodes });
 }

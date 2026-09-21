@@ -45,14 +45,22 @@ export default function AriadnaApp() {
       return;
     }
     setSession(s);
+    // RF-18: Restaurar nodos dominados de sesiones anteriores
+    if (s.masteredNodes?.length) {
+      setMasteredNodes(new Set(s.masteredNodes));
+    }
   }, [router]);
 
-  // ── Filtrar ejercicios por nodo activo ──────────────────────────────────────
+  // RF-15: Grupo 2 tiene máximo 5 ejercicios por sesión (apoyo en taller)
+  const SESSION_LIMIT = session?.groupId === 2 ? 5 : Infinity;
+
+  // ── Filtrar ejercicios por nodo activo ────────────────────────────────────────
   useEffect(() => {
     const nodeExercises = EXERCISES.filter(e => e.node === activeNode);
-    setExercises(shuffle(nodeExercises));
+    const limited = nodeExercises.slice(0, SESSION_LIMIT);
+    setExercises(shuffle(limited));
     setCurrent(0);
-  }, [activeNode]);
+  }, [activeNode, SESSION_LIMIT]);
 
   const ex: Exercise | undefined = exercises[current];
   const currentNodeId = activeNode;
@@ -97,7 +105,7 @@ export default function AriadnaApp() {
         const body = await res.json().catch(() => ({}));
         const msg =
           res.status === 503
-            ? "El motor de verificación no está disponible. Avisa a tu docente."
+            ? (body?.error ?? "El motor está arrancando. Espera 10 segundos y vuelve a intentar.")
             : (body?.error ?? `Error del servidor (${res.status}). Intenta de nuevo.`);
         setServiceError(msg);
         setChecking(false);
@@ -207,7 +215,31 @@ export default function AriadnaApp() {
     router.replace("/login");
   }
 
-  if (!session || !ex) {
+  if (!session) {
+    return (
+      <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--text-dim)" }}>
+        Cargando<span className="loading-dots" />
+      </div>
+    );
+  }
+
+  // RF-15: Pantalla de sesión completada (Grupo 2)
+  if (session.groupId === 2 && current >= exercises.length && exercises.length > 0 && activeNode === "algebra_derivadas") {
+    return (
+      <div style={{ textAlign: "center", padding: "80px 20px", color: "var(--text-main)" }}>
+        <h2 style={{ fontSize: "1.8rem", marginBottom: "12px" }}>Sesión completada 🎓</h2>
+        <p style={{ color: "var(--text-dim)", maxWidth: "420px", margin: "0 auto 24px" }}>
+          Has terminado los ejercicios de esta sesión de taller.
+          Tu progreso queda guardado. Buena continuación.
+        </p>
+        <button onClick={handleLogout} style={{ padding: "10px 24px", borderRadius: "8px", background: "var(--accent-glow)", color: "#111", border: "none", cursor: "pointer", fontWeight: 600 }}>
+          Cerrar sesión
+        </button>
+      </div>
+    );
+  }
+
+  if (!ex) {
     return (
       <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--text-dim)" }}>
         Cargando<span className="loading-dots" />

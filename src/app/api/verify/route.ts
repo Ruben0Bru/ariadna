@@ -14,8 +14,19 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const VERIFY_SERVICE_URL =
-  process.env.VERIFY_SERVICE_URL ?? "http://localhost:8000";
+// En Vercel, VERCEL_URL es inyectada automáticamente como variable de sistema.
+// Apunta a /api/sympy_verify (Python Serverless Function en la misma app).
+// En dev local, sigue apuntando al backend FastAPI en localhost:8000.
+const _BASE =
+  process.env.VERIFY_SERVICE_URL ??
+  (process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:8000");
+
+// La ruta difiere entre el backend FastAPI (legacy) y la función serverless
+const SYMPY_URL = process.env.VERCEL_URL || process.env.VERIFY_SERVICE_URL?.startsWith("https")
+  ? `${_BASE}/api/sympy_verify`
+  : `${_BASE}/verify`;
 
 interface VerifyBody {
   studentId: string;
@@ -106,11 +117,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Ejercicio ${exerciseId} no encontrado` }, { status: 404 });
   }
 
-  // 2. Verificación simbólica — microservicio Python/SymPy
-  //    AbortSignal.timeout(3000) → falla en 3s si el servicio no responde
+  // 2. Verificación simbólica — función serverless Python/SymPy en Vercel
+  //    AbortSignal.timeout(10000): 10s para el cold-start de SymPy en Vercel Free
   let verifyResult: { correct: boolean; error_type: string | null };
   try {
-    const res = await fetch(`${VERIFY_SERVICE_URL}/verify`, {
+    const res = await fetch(SYMPY_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -118,26 +129,21 @@ export async function POST(req: NextRequest) {
         correct_expr: exercise.correct_expr,
         variable: exercise.variable ?? "x",
       }),
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) {
       const errBody = await res.text();
-      throw new Error(`verify service respondió ${res.status}: ${errBody}`);
+      throw new Error(`sympy_verify respondió ${res.status}: ${errBody}`);
     }
     verifyResult = await res.json();
   } catch (e) {
-    console.warn("[Ariadna/verify] Motor simbólico no disponible, usando fallback básico (solo para Demo).", e);
-    
-    // FALLBACK DE EMERGENCIA (Para salvar la demo si no hay backend Python)
-    // Se quitan los espacios para una comparación literal muy básica.
-    const sanitize = (str: string) => str.replace(/\s+/g, "").replace(/\^/g, "**");
-    const s1 = sanitize(studentAnswer);
-    const s2 = sanitize(exercise.correct_expr);
-    
-    verifyResult = {
-      correct: s1 === s2,
-      error_type: s1 === s2 ? null : "desconocido",
-    };
+    // RNF-01: Un falso resultado es peor que un error explícito.
+    // Nunca inventamos correcto/incorrecto — informamos al estudiante.
+    console.error("[Ariadna/verify] Motor simbólico no disponible:", e);
+    return NextResponse.json(
+      { error: "El motor de verificación no está disponible. Espera unos segundos y vuelve a intentar (puede ser un arranque en frío del servidor)." },
+      { status: 503 }
+    );
   }
 
 

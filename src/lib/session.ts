@@ -3,9 +3,10 @@
 // Solo corre en el cliente (browser).
 
 export interface StudentSession {
-  studentId: string; // UUID de Supabase o código local
-  groupId: number;   // 1 | 2 | 3
-  code: string;      // código visible, ej. "G2-014"
+  studentId: string;   // UUID de Supabase o código local
+  groupId: number;     // 1 | 2 | 3
+  code: string;        // código visible, ej. "G2-014"
+  masteredNodes: string[]; // RF-18: nodos ya dominados en sesiones previas
 }
 
 const SESSION_KEY = "ariadna_session";

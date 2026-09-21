@@ -39,6 +39,7 @@ export default function LoginPage() {
         studentId: data.studentId,
         groupId: data.groupId,
         code: trimmed,
+        masteredNodes: data.masteredNodes ?? [],
       });
 
       router.push("/");
