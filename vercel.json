@@ -5,8 +5,7 @@
   "installCommand": "npm install",
   "functions": {
     "api/sympy_verify.py": {
-      "runtime": "python3.11",
-      "maxDuration": 30
+      "runtime": "python3.9"
     }
   }
 }

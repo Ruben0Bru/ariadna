@@ -1,114 +1,73 @@
 """
 Ariadna — Motor de verificación simbólica (Vercel Python Serverless Function)
-
-Este archivo reemplaza el backend FastAPI separado.
-Vercel lo ejecuta como una función Lambda bajo /api/sympy_verify
-sin necesidad de un servidor adicional.
-
-Responsabilidades:
-- Verificar equivalencia matemática usando SymPy (nunca aproximación numérica)
-- Clasificar el tipo de error cuando la respuesta es incorrecta
-- Rechazar entradas inválidas de forma segura (sin eval() libre)
+Ruta: /api/sympy_verify
 """
 
 from http.server import BaseHTTPRequestHandler
 import json
-import sympy as sp
-from sympy.parsing.sympy_parser import (
-    parse_expr, standard_transformations,
-    implicit_multiplication_application, convert_xor
-)
-
-TRANSFORMATIONS = standard_transformations + (
-    implicit_multiplication_application, convert_xor
-)
 
 
-def safe_parse(text: str, var: sp.Symbol):
-    """Parsea de forma segura usando el parser de SymPy (sin eval)."""
-    return parse_expr(
-        text,
-        transformations=TRANSFORMATIONS,
-        local_dict={"x": var, "sqrt": sp.sqrt}
+def _parse_and_verify(student_answer: str, correct_expr_str: str, variable_str: str = "x") -> dict:
+    # Import SymPy aquí (no a nivel de módulo) para evitar errores en cold start
+    import sympy as sp
+    from sympy.parsing.sympy_parser import (
+        parse_expr, standard_transformations,
+        implicit_multiplication_application, convert_xor
     )
 
+    T = standard_transformations + (implicit_multiplication_application, convert_xor)
+    var = sp.Symbol(variable_str)
+    local = {"x": var, "sqrt": sp.sqrt, "exp": sp.exp, "ln": sp.ln, "log": sp.log}
 
-def expressions_equal(a: sp.Expr, b: sp.Expr, var: sp.Symbol) -> bool:
-    """
-    Equivalencia simbólica con respaldo numérico.
-    simplify(a - b) == 0 cubre la mayoría de casos.
-    """
+    def safe_parse(txt: str):
+        return parse_expr(txt, transformations=T, local_dict=local)
+
+    original = safe_parse(correct_expr_str)
+    student = safe_parse(student_answer)
+    expected_derivative = sp.diff(original, var)
+
+    # Equivalencia simbólica: simplify(a - b) == 0
+    is_correct = False
     try:
-        diff = sp.simplify(a - b)
-        if diff == 0:
-            return True
-        # Respaldo numérico para formas equivalentes complejas
-        test_points = [1.3, -0.7, 2.9, -2.1, 0.05]
-        for point in test_points:
-            va = complex(a.subs(var, point).evalf())
-            vb = complex(b.subs(var, point).evalf())
-            if abs(va - vb) > 1e-6 * max(1, abs(va)):
-                return False
-        return True
-    except Exception:
-        return False
-
-
-def classify_error(student_expr, correct_derivative, original_expr, var) -> str:
-    """Heurística de clasificación de error (RF-07)."""
-    try:
-        # ¿No derivó — copió la función original?
-        if sp.simplify(student_expr - original_expr) == 0:
-            return "no_derivo"
-        # ¿Error de signo?
-        if sp.simplify(student_expr + correct_derivative) == 0:
-            return "signo"
-        # ¿Olvidó derivar la constante?
-        try:
-            original_const = original_expr.as_coeff_Add()[0]
-            if original_const != 0 and sp.simplify(
-                student_expr - correct_derivative - original_const
-            ) == 0:
-                return "constante"
-        except Exception:
-            pass
-        # ¿Error de exponente/coeficiente?
-        student_terms = sp.Add.make_args(sp.expand(student_expr))
-        correct_terms = sp.Add.make_args(sp.expand(correct_derivative))
-        if len(student_terms) == len(correct_terms):
-            return "exponente_o_coeficiente"
+        is_correct = sp.simplify(student - expected_derivative) == 0
     except Exception:
         pass
-    return "desconocido"
 
+    # Respaldo numérico si simplify no resuelve
+    if not is_correct:
+        try:
+            pts = [1.3, -0.7, 2.9, -2.1, 0.05]
+            is_correct = all(
+                abs(complex(student.subs(var, p).evalf()) -
+                    complex(expected_derivative.subs(var, p).evalf())) < 1e-6
+                for p in pts
+            )
+        except Exception:
+            pass
 
-def handle_verify(body: dict) -> dict:
-    student_answer = body.get("student_answer", "").strip()
-    correct_expr_str = body.get("correct_expr", "").strip()
-    variable_str = body.get("variable", "x").strip() or "x"
-
-    if not student_answer or not correct_expr_str:
-        raise ValueError("Faltan campos: student_answer y correct_expr son requeridos.")
-
-    var = sp.Symbol(variable_str)
-    original_expr = safe_parse(correct_expr_str, var)
-    student_expr = safe_parse(student_answer, var)
-    correct_derivative = sp.diff(original_expr, var)
-
-    is_correct = expressions_equal(student_expr, correct_derivative, var)
     error_type = None
     if not is_correct:
-        error_type = classify_error(student_expr, correct_derivative, original_expr, var)
+        # Heurísticas de clasificación de error (RF-07)
+        try:
+            if sp.simplify(student - original) == 0:
+                error_type = "no_derivo"
+            elif sp.simplify(student + expected_derivative) == 0:
+                error_type = "signo"
+            else:
+                const = original.as_coeff_Add()[0]
+                if const != 0 and sp.simplify(student - expected_derivative - const) == 0:
+                    error_type = "constante"
+                else:
+                    error_type = "desconocido"
+        except Exception:
+            error_type = "desconocido"
 
-    return {
-        "correct": is_correct,
-        "error_type": error_type,
-        "detail": f"esperado={sp.simplify(correct_derivative)}" if not is_correct else None,
-    }
+    return {"correct": is_correct, "error_type": error_type}
 
 
 class handler(BaseHTTPRequestHandler):
-    def _send_json(self, status: int, data: dict):
+
+    def _send(self, status: int, data: dict):
         body = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -128,10 +87,23 @@ class handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
-            result = handle_verify(body)
-            self._send_json(200, result)
-        except (ValueError, SyntaxError, Exception) as e:
-            self._send_json(400, {"detail": f"Expresión inválida: {e}"})
+        except Exception:
+            self._send(400, {"detail": "Cuerpo JSON inválido"})
+            return
+
+        student_answer = (body.get("student_answer") or "").strip()
+        correct_expr = (body.get("correct_expr") or "").strip()
+        variable = (body.get("variable") or "x").strip() or "x"
+
+        if not student_answer or not correct_expr:
+            self._send(400, {"detail": "Faltan campos: student_answer y correct_expr"})
+            return
+
+        try:
+            result = _parse_and_verify(student_answer, correct_expr, variable)
+            self._send(200, result)
+        except Exception as e:
+            self._send(400, {"detail": f"Expresión inválida o no parseable: {e}"})
 
     def log_message(self, format, *args):
-        pass  # Silencia logs de acceso en Vercel
+        pass  # silenciar logs de acceso
