@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
     if (!geminiRes.ok) {
       const errText = await geminiRes.text();
       console.error("[Ariadna/feedback] Gemini API error:", errText);
-      throw new Error("Gemini API error");
+      throw new Error(`Gemini API error ${geminiRes.status}: ${errText}`);
     }
 
     const data = await geminiRes.json();

@@ -86,7 +86,7 @@ ${rules}
 
   try {
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -108,7 +108,8 @@ ${rules}
     );
 
     if (!geminiRes.ok) {
-      throw new Error(`Gemini error: ${geminiRes.status}`);
+      const errText = await geminiRes.text();
+      throw new Error(`Gemini error ${geminiRes.status}: ${errText}`);
     }
 
     const data = await geminiRes.json();
@@ -127,12 +128,12 @@ ${rules}
       // Intentamos extraer el studentId del último mensaje o usar un fallback temporal
       // ya que body no tiene explícitamente studentId todavía (requeriría actializar App.tsx)
       const { studentId } = body;
-      if (studentId) {
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (studentId && supabaseUrl && supabaseKey) {
         const { createClient } = require("@supabase/supabase-js");
-        const sb = createClient(
-          process.env.SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        const sb = createClient(supabaseUrl, supabaseKey);
         
         // Log fire-and-forget
         sb.from("chat_logs").insert({

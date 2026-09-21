@@ -59,9 +59,16 @@ export default function AriadnaApp() {
     const s = getSession();
     if (!s) { window.location.href = "/login"; return; }
     setSession(s);
-    // RF-18: Restaurar progreso de sesiones anteriores
+    // RF-18 / Producto Final: Restaurar progreso y avanzar automáticamente
     if (s.masteredNodes?.length) {
-      setMasteredNodes(new Set(s.masteredNodes));
+      const mNodes = new Set(s.masteredNodes);
+      setMasteredNodes(mNodes);
+      
+      // Si el nodo de inicio por defecto ya está dominado, salta al siguiente disponible
+      if (mNodes.has(DEFAULT_NODE)) {
+        const next = DAG_ORDER.find(n => !mNodes.has(n));
+        if (next) setActiveNode(next);
+      }
     }
   }, [router]);
 
@@ -396,9 +403,9 @@ export default function AriadnaApp() {
             {activeNode !== DEFAULT_NODE && (
               <button
                 onClick={handleReturnEarly}
-                style={{ background: "transparent", border: "1px solid var(--accent)", color: "var(--accent-glow)", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "0.9rem" }}
+                style={{ background: "transparent", border: "1px solid var(--accent-glow)", color: "var(--accent-glow)", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "0.9rem" }}
               >
-                ↩ Volver a derivadas
+                ↩ Volver a {DAG[DEFAULT_NODE]?.label ?? "unidad"}
               </button>
             )}
             <button
@@ -414,9 +421,9 @@ export default function AriadnaApp() {
           <div style={{ marginTop: "10px", textAlign: "right" }}>
             <button
               onClick={handleReturnEarly}
-              style={{ background: "transparent", border: "1px solid var(--accent)", color: "var(--accent-glow)", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "0.9rem" }}
+              style={{ background: "transparent", border: "1px solid var(--accent-glow)", color: "var(--accent-glow)", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontSize: "1rem", fontWeight: "bold" }}
             >
-              ↩ Ya entendí, volver al tema principal
+              ↩ Repaso terminado, volver a {DAG[DEFAULT_NODE]?.label ?? "unidad"}
             </button>
           </div>
         )}
