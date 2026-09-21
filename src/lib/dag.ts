@@ -6,6 +6,78 @@ export const DAG: Record<string, { label: string; unit: string }> = {
   regla_cadena:      { label: "Regla cadena",        unit: "Unidad 3" },
 };
 
+// Tarjetas de concepto — se muestran ANTES del primer ejercicio de cada nodo (tutor real)
+export interface NodeConcept {
+  title: string;
+  body: string;         // Markdown + LaTeX (delimitadores $$)
+  example: string;      // Markdown + LaTeX del ejemplo resuelto
+  tip: string;          // Recordatorio rápido para el input del estudiante
+}
+
+export const CONCEPTS: Record<string, NodeConcept> = {
+  algebra_derivadas: {
+    title: "La Regla de la Potencia",
+    body: `La regla más fundamental para derivar: si $f(x) = x^n$, entonces
+
+$$f'(x) = n \\cdot x^{n-1}$$
+
+El exponente **baja** como coeficiente y el nuevo exponente es uno menos. Se aplica término a término en cualquier polinomio, y la derivada de una constante sola siempre es **cero**.`,
+    example: `**Ejemplo:** $f(x) = 4x^3 - 2x + 7$
+
+$$f'(x) = 4 \\cdot 3 \\cdot x^{3-1} - 2 \\cdot 1 \\cdot x^{1-1} + 0 = 12x^2 - 2$$`,
+    tip: "Escribe la derivada usando ^ para potencias y * para multiplicar (ej. 12*x^2 - 2)",
+  },
+
+  leyes_exponentes: {
+    title: "Propiedades de los Exponentes",
+    body: `Estas leyes son indispensables para simplificar antes de derivar:
+
+| Operación | Ley |
+|-----------|-----|
+| Multiplicar igual base | $x^a \\cdot x^b = x^{a+b}$ |
+| Dividir igual base | $x^a \\div x^b = x^{a-b}$ |
+| Raíz cuadrada | $\\sqrt{x} = x^{1/2}$ |
+| Potencia de potencia | $(x^a)^b = x^{a \\cdot b}$ |`,
+    example: `**Ejemplo:** Simplifica $x^5 \\cdot x^{-2}$
+
+$$x^5 \\cdot x^{-2} = x^{5+(-2)} = x^3$$`,
+    tip: "Escribe tu respuesta simplificada, por ejemplo: x^7 o sqrt(x)",
+  },
+
+  factorizacion: {
+    title: "Productos Notables y Distributiva",
+    body: `Antes de derivar es necesario expandir expresiones. Los más comunes:
+
+$$\`(a+b)^2 = a^2 + 2ab + b^2\`$$
+$$\`(a-b)(a+b) = a^2 - b^2\`$$
+$$\`a(b+c) = ab + ac\`$$
+
+Expandir primero convierte un producto en un polinomio fácil de derivar término a término.`,
+    example: `**Ejemplo:** Expande $(2x - 1)^2$
+
+$$(2x)^2 - 2(2x)(1) + 1^2 = 4x^2 - 4x + 1$$`,
+    tip: "Escribe la forma expandida: ej. x^2 + 6*x + 9",
+  },
+
+  regla_cadena: {
+    title: "Regla de la Cadena",
+    body: `Se usa cuando la función es una **composición**: una función dentro de otra.
+
+Si $f(x) = g(h(x))$, entonces:
+
+$$f'(x) = g'(h(x)) \\cdot h'(x)$$
+
+Es decir: **derivada de la exterior** (dejando la interior intacta) **× derivada de la interior**.`,
+    example: `**Ejemplo:** $f(x) = (3x + 2)^4$
+
+- Exterior: $g(u) = u^4 \\Rightarrow g'(u) = 4u^3$  
+- Interior: $h(x) = 3x+2 \\Rightarrow h'(x) = 3$
+
+$$f'(x) = 4(3x+2)^3 \\cdot 3 = 12(3x+2)^3$$`,
+    tip: "Escribe el resultado final multiplicado: ej. 6*(2*x+1)^2",
+  },
+};
+
 export const DAG_ORDER = [
   "leyes_exponentes",
   "factorizacion",

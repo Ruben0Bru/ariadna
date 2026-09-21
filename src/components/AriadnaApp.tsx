@@ -2,14 +2,15 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { DAG, DAG_ORDER, EXERCISES, type Exercise } from "@/lib/dag";
-import { getSession, clearSession, type StudentSession } from "@/lib/session";
+import { DAG, DAG_ORDER, EXERCISES, CONCEPTS, type Exercise } from "@/lib/dag";
+import { getSession, clearSession, saveSession, type StudentSession } from "@/lib/session";
 import ThreadMap from "@/components/ThreadMap";
 import FeedbackBox from "@/components/FeedbackBox";
+import ConceptCard from "@/components/ConceptCard";
 
 type FeedbackState = "hidden" | "ok" | "warn";
 
-// Baraja un arreglo (Fisher-Yates) para no repetir ejercicios en orden
+// Baraja un arreglo (Fisher-Yates)
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -19,14 +20,29 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+const MASTERY_THRESHOLD = 3; // respuestas correctas consecutivas para dominar un nodo
+
 export default function AriadnaApp() {
   const router = useRouter();
   const [session, setSession] = useState<StudentSession | null>(null);
+
+  // ── Fase de concepto (antes de ejercicios) ──────────────────────────────────
+  // conceptShown: nodos cuya tarjeta de concepto YA fue mostrada esta sesión
+  const [conceptShown, setConceptShown] = useState<Set<string>>(new Set());
+  const [showingConcept, setShowingConcept] = useState(false);
+
+  // ── Estado de ejercicios ────────────────────────────────────────────────────
   const [activeNode, setActiveNode] = useState<string>("algebra_derivadas");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [current, setCurrent] = useState(0);
   const [masteredNodes, setMasteredNodes] = useState<Set<string>>(new Set());
   const [reviewNode, setReviewNode] = useState<string | null>(null);
+
+  // ── Criterio de dominio: 3 correctas consecutivas ───────────────────────────
+  const [consecutiveCorrect, setConsecutiveCorrect] = useState(0);
+  const [justMastered, setJustMastered] = useState(false); // pantalla de celebración
+
+  // ── Interacción ─────────────────────────────────────────────────────────────
   const [inputValue, setInputValue] = useState("");
   const [checking, setChecking] = useState(false);
   const [feedbackState, setFeedbackState] = useState<FeedbackState>("hidden");
@@ -40,33 +56,40 @@ export default function AriadnaApp() {
   // ── Verificar sesión al montar ──────────────────────────────────────────────
   useEffect(() => {
     const s = getSession();
-    if (!s) {
-      router.replace("/login");
-      return;
-    }
+    if (!s) { router.replace("/login"); return; }
     setSession(s);
-    // RF-18: Restaurar nodos dominados de sesiones anteriores
+    // RF-18: Restaurar progreso de sesiones anteriores
     if (s.masteredNodes?.length) {
       setMasteredNodes(new Set(s.masteredNodes));
     }
   }, [router]);
 
-  // RF-15: Grupo 2 tiene máximo 5 ejercicios por sesión (apoyo en taller)
+  // ── Cambio de nodo: mostrar concepto si es nuevo ────────────────────────────
+  useEffect(() => {
+    if (!conceptShown.has(activeNode) && CONCEPTS[activeNode]) {
+      setShowingConcept(true);
+    } else {
+      setShowingConcept(false);
+    }
+  }, [activeNode, conceptShown]);
+
+  // ── RF-15: Grupo 2 tiene máximo 5 ejercicios por sesión ─────────────────────
   const SESSION_LIMIT = session?.groupId === 2 ? 5 : Infinity;
 
-  // ── Filtrar ejercicios por nodo activo ────────────────────────────────────────
+  // ── Filtrar ejercicios al cambiar de nodo ───────────────────────────────────
   useEffect(() => {
     const nodeExercises = EXERCISES.filter(e => e.node === activeNode);
     const limited = nodeExercises.slice(0, SESSION_LIMIT);
     setExercises(shuffle(limited));
     setCurrent(0);
+    setConsecutiveCorrect(0);
+    setJustMastered(false);
   }, [activeNode, SESSION_LIMIT]);
 
   const ex: Exercise | undefined = exercises[current];
   const currentNodeId = activeNode;
-  const isDerivativeNode = currentNodeId === "algebra_derivadas" || currentNodeId === "regla_cadena";
 
-  // reset cuando cambia el ejercicio
+  // Reset al cambiar de ejercicio
   useEffect(() => {
     setInputValue("");
     setFeedbackState("hidden");
@@ -75,12 +98,12 @@ export default function AriadnaApp() {
     inputRef.current?.focus();
   }, [current, activeNode]);
 
+  // ── Verificación y feedback ─────────────────────────────────────────────────
   const handleCheck = useCallback(async () => {
     if (!inputValue.trim() || checking || !ex || !session) return;
     setChecking(true);
     setServiceError(null);
 
-    // 1. Llamar al orquestador /api/verify (SymPy + log Supabase)
     let verifyData: {
       correct: boolean;
       errorType: string | null;
@@ -100,7 +123,6 @@ export default function AriadnaApp() {
         }),
       });
 
-      // Cualquier respuesta de error detiene el flujo con mensaje claro
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         const msg =
@@ -119,31 +141,42 @@ export default function AriadnaApp() {
       return;
     }
 
-
-    // 2. Actualizar estado del grafo
     const { correct, prereqSuggested, failReason, errorType, attemptId } = verifyData;
 
+    // ── Actualizar criterio de dominio ──────────────────────────────────────
     if (correct) {
-      setMasteredNodes((prev) => new Set([...prev, currentNodeId]));
+      const newConsec = consecutiveCorrect + 1;
+      setConsecutiveCorrect(newConsec);
       setReviewNode(null);
+
+      if (newConsec >= MASTERY_THRESHOLD && !masteredNodes.has(currentNodeId)) {
+        // ¡Nodo dominado!
+        const newMastered = new Set([...masteredNodes, currentNodeId]);
+        setMasteredNodes(newMastered);
+        setJustMastered(true);
+        // Persistir en session (RF-18)
+        if (session) {
+          saveSession({ ...session, masteredNodes: [...newMastered] });
+        }
+      }
     } else {
+      setConsecutiveCorrect(0);
       setReviewNode(prereqSuggested);
-      setFailedAttempts((prev) => prev + 1);
+      setFailedAttempts(prev => prev + 1);
     }
 
-    // 3. Mostrar feedback con loading mientras llama a Gemini
+    // ── Mostrar feedback ────────────────────────────────────────────────────
     setFeedbackState(correct ? "ok" : "warn");
     setFeedbackTag(
       correct
-        ? "✓ CORRECTO — Verificado por SymPy"
-        : "✗ REVISIÓN NECESARIA — Verificado por SymPy"
+        ? `✓ CORRECTO — ${consecutiveCorrect + 1}/${MASTERY_THRESHOLD} hacia dominio`
+        : "✗ REVISIÓN NECESARIA — Verificado por motor matemático"
     );
     setFeedbackText("");
     setFeedbackLoading(true);
 
     const targetNode = prereqSuggested ? DAG[prereqSuggested] : null;
 
-    // 4. Pedir retroalimentación al mediador pedagógico (Gemini)
     try {
       const fbRes = await fetch("/api/feedback", {
         method: "POST",
@@ -160,7 +193,7 @@ export default function AriadnaApp() {
           targetNodeUnit: targetNode?.unit ?? "",
           errorType,
           attemptId,
-          failedAttempts,
+          failedAttempts: failedAttempts + (correct ? 0 : 1),
         }),
       });
       const fbData = await fbRes.json();
@@ -168,17 +201,14 @@ export default function AriadnaApp() {
     } catch {
       setFeedbackText(
         correct
-          ? "¡Correcto! El resultado coincide con lo esperado — puedes avanzar."
-          : `No es correcto todavía. Conviene repasar: ${failReason ?? ex.failReason}.`
+          ? "¡Correcto! El resultado coincide — puedes avanzar."
+          : `No es correcto todavía. Revisa: ${failReason ?? ex.failReason}.`
       );
     } finally {
       setFeedbackLoading(false);
       setChecking(false);
     }
-
-    // 5. El avance automático fue removido por solicitud de UX.
-    // El estudiante debe dar click a 'Siguiente' cuando esté listo leyendo el feedback.
-  }, [inputValue, checking, ex, session, current, exercises.length, activeNode]);
+  }, [inputValue, checking, ex, session, currentNodeId, consecutiveCorrect, masteredNodes, failedAttempts]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") handleCheck();
@@ -186,7 +216,7 @@ export default function AriadnaApp() {
 
   function handleNext() {
     if (current < exercises.length - 1) {
-      setCurrent((c) => c + 1);
+      setCurrent(c => c + 1);
     } else if (activeNode !== "algebra_derivadas") {
       setActiveNode("algebra_derivadas");
     }
@@ -195,26 +225,35 @@ export default function AriadnaApp() {
   function handleSkip() {
     setFeedbackState("ok");
     setFeedbackTag("✓ AVANCE FORZADO");
-    setFeedbackText(`La respuesta era: ${ex?.expr}.`);
-    // Ahora el usuario debe darle manualmente al botón de avanzar
+    setFeedbackText(`La respuesta esperada era: ${ex?.expr}.`);
   }
 
   function handleGoToReview() {
-    if (reviewNode) {
-      setActiveNode(reviewNode);
-      setReviewNode(null);
+    if (reviewNode) { setActiveNode(reviewNode); setReviewNode(null); }
+  }
+
+  function handleReturnEarly() { setActiveNode("algebra_derivadas"); }
+
+  function handleLogout() { clearSession(); router.replace("/login"); }
+
+  function handleConceptDone() {
+    setConceptShown(prev => new Set([...prev, activeNode]));
+    setShowingConcept(false);
+  }
+
+  function handleContinueAfterMastery() {
+    setJustMastered(false);
+    // Si estaba en un nodo de repaso, regresar al principal
+    if (activeNode !== "algebra_derivadas") {
+      setActiveNode("algebra_derivadas");
+    } else {
+      // Avanzar al siguiente nodo no dominado del DAG
+      const next = DAG_ORDER.find(n => !masteredNodes.has(n) && n !== activeNode);
+      if (next) setActiveNode(next);
     }
   }
 
-  function handleReturnEarly() {
-    setActiveNode("algebra_derivadas");
-  }
-
-  function handleLogout() {
-    clearSession();
-    router.replace("/login");
-  }
-
+  // ── Guards de renderizado ───────────────────────────────────────────────────
   if (!session) {
     return (
       <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--text-dim)" }}>
@@ -224,17 +263,53 @@ export default function AriadnaApp() {
   }
 
   // RF-15: Pantalla de sesión completada (Grupo 2)
-  if (session.groupId === 2 && current >= exercises.length && exercises.length > 0 && activeNode === "algebra_derivadas") {
+  if (session.groupId === 2 && current >= exercises.length && exercises.length > 0 && activeNode === "algebra_derivadas" && !justMastered) {
     return (
       <div style={{ textAlign: "center", padding: "80px 20px", color: "var(--text-main)" }}>
         <h2 style={{ fontSize: "1.8rem", marginBottom: "12px" }}>Sesión completada 🎓</h2>
         <p style={{ color: "var(--text-dim)", maxWidth: "420px", margin: "0 auto 24px" }}>
-          Has terminado los ejercicios de esta sesión de taller.
-          Tu progreso queda guardado. Buena continuación.
+          Has terminado los ejercicios de esta sesión de taller. Tu progreso queda guardado.
         </p>
         <button onClick={handleLogout} style={{ padding: "10px 24px", borderRadius: "8px", background: "var(--accent-glow)", color: "#111", border: "none", cursor: "pointer", fontWeight: 600 }}>
           Cerrar sesión
         </button>
+      </div>
+    );
+  }
+
+  // Pantalla de celebración de dominio
+  if (justMastered) {
+    const nodeName = DAG[currentNodeId]?.label ?? currentNodeId;
+    return (
+      <div className="mastery-screen" role="dialog" aria-label="Nodo dominado">
+        <div className="mastery-icon">🏆</div>
+        <h2 className="mastery-title">¡Nodo dominado!</h2>
+        <p className="mastery-subtitle">
+          Respondiste <strong>{MASTERY_THRESHOLD} seguidas correctamente</strong>
+        </p>
+        <div className="mastery-node-badge">{nodeName}</div>
+        <p className="mastery-body">
+          El motor matemático confirma que comprendes este tema. Tu progreso queda guardado.
+        </p>
+        <button className="mastery-continue-btn" onClick={handleContinueAfterMastery}>
+          Continuar →
+        </button>
+      </div>
+    );
+  }
+
+  // Tarjeta de concepto (antes del primer ejercicio del nodo)
+  if (showingConcept && CONCEPTS[activeNode]) {
+    return (
+      <div style={{ maxWidth: "720px", margin: "0 auto", padding: "40px 20px" }}>
+        <header style={{ marginBottom: "24px" }}>
+          <div className="eyebrow">ARIADNA — TUTOR DE CÁLCULO I</div>
+        </header>
+        <ConceptCard
+          nodeId={activeNode}
+          concept={CONCEPTS[activeNode]}
+          onStart={handleConceptDone}
+        />
       </div>
     );
   }
@@ -264,8 +339,7 @@ export default function AriadnaApp() {
           al nodo que necesitas.
         </h1>
         <p className="sub">
-          Resuelve cada ejercicio. El sistema verifica tu respuesta simbólicamente
-          (con SymPy, no por comparación de texto) y te orienta si algo falla.
+          Resuelve cada ejercicio. Domina un nodo respondiendo {MASTERY_THRESHOLD} seguidas bien.
           Usa{" "}
           <code className="inline-code">^</code> para potencias,{" "}
           <code className="inline-code">*</code> para multiplicar,{" "}
@@ -283,6 +357,11 @@ export default function AriadnaApp() {
         <div className="card-meta">
           <span className="card-label">Ejercicio {current + 1} de {exercises.length}</span>
           <span className="card-node-badge">{DAG[currentNodeId]?.label ?? currentNodeId}</span>
+          {consecutiveCorrect > 0 && !justMastered && (
+            <span className="mastery-progress-badge">
+              🔥 {consecutiveCorrect}/{MASTERY_THRESHOLD} consecutivas
+            </span>
+          )}
         </div>
 
         <div className="problem" id="problemText">
@@ -294,7 +373,7 @@ export default function AriadnaApp() {
             ref={inputRef}
             type="text"
             id="answerInput"
-            placeholder="ej: 6x - 5   (usa ^ para potencias, * para multiplicar)"
+            placeholder="ej: 6*x - 5   (usa ^ para potencias, * para multiplicar)"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -316,54 +395,29 @@ export default function AriadnaApp() {
             {activeNode !== "algebra_derivadas" && (
               <button
                 onClick={handleReturnEarly}
-                style={{
-                  background: "transparent",
-                  border: "1px solid var(--accent)",
-                  color: "var(--accent-glow)",
-                  padding: "6px 12px",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontSize: "0.9rem"
-                }}
+                style={{ background: "transparent", border: "1px solid var(--accent)", color: "var(--accent-glow)", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "0.9rem" }}
               >
                 ↩ Volver a derivadas
               </button>
             )}
             <button
               onClick={handleSkip}
-              style={{
-                background: "transparent",
-                border: "1px solid var(--border)",
-                color: "var(--text-dim)",
-                padding: "6px 12px",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: "0.9rem"
-              }}
+              style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-dim)", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "0.9rem" }}
             >
               Me rindo, mostrar solución ⏭
             </button>
           </div>
         )}
 
-        {/* Botón de retorno rápido para cuando logran entender el concepto antes de terminar todos los ej */}
         {activeNode !== "algebra_derivadas" && failedAttempts < 3 && !checking && feedbackState !== "ok" && (
-           <div style={{ marginTop: "10px", textAlign: "right" }}>
+          <div style={{ marginTop: "10px", textAlign: "right" }}>
             <button
               onClick={handleReturnEarly}
-              style={{
-                background: "transparent",
-                border: "1px solid var(--accent)",
-                color: "var(--accent-glow)",
-                padding: "6px 12px",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: "0.9rem"
-              }}
+              style={{ background: "transparent", border: "1px solid var(--accent)", color: "var(--accent-glow)", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "0.9rem" }}
             >
               ↩ Ya entendí, volver al tema principal
             </button>
-           </div>
+          </div>
         )}
 
         {serviceError && (
@@ -381,15 +435,7 @@ export default function AriadnaApp() {
           <div style={{ marginTop: "15px", textAlign: "center" }}>
             <button
               onClick={handleGoToReview}
-              style={{
-                background: "var(--accent-glow)",
-                color: "#111",
-                border: "none",
-                padding: "8px 16px",
-                borderRadius: "8px",
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
+              style={{ background: "var(--accent-glow)", color: "#111", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: 600 }}
             >
               Repasar {DAG[reviewNode]?.label ?? "prerrequisito"} ↗
             </button>
@@ -397,16 +443,15 @@ export default function AriadnaApp() {
         )}
 
         <div className="architecture">
-          <span>Juez matemático: <b>SymPy (backend Python)</b></span>
-          <span>Mediador pedagógico: <b>Gemini 2.0 Flash</b></span>
-          <span>Posición curricular: <b>grafo DAG</b></span>
+          <span>Juez matemático: <b>mathjs (verificación numérica)</b></span>
+          <span>Mediador pedagógico: <b>Gemini — 3 niveles de pista</b></span>
+          <span>Dominio: <b>{MASTERY_THRESHOLD} correctas consecutivas</b></span>
         </div>
       </div>
 
       <footer>
         Ariadna — Universidad de Córdoba, Ingeniería de Sistemas. La verificación es
-        simbólica real (Python/SymPy en backend). El LLM sólo redacta
-        el texto pedagógico, nunca evalúa matemáticamente.
+        matemática real (mathjs). El LLM sólo redacta el texto pedagógico, nunca evalúa matemáticamente.
       </footer>
     </>
   );
