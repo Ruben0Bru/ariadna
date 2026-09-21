@@ -2,10 +2,5 @@
   "framework": "nextjs",
   "buildCommand": "next build",
   "devCommand": "next dev",
-  "installCommand": "npm install",
-  "functions": {
-    "api/sympy_verify.py": {
-      "runtime": "python3.9"
-    }
-  }
+  "installCommand": "npm install"
 }
