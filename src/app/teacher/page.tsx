@@ -1,12 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { useState, useEffect, useMemo } from "react";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 // MVP Teacher Dashboard (Client-Side data fetching for simplicity)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface StudentStat {
   student_id: string;
@@ -24,6 +21,14 @@ export default function TeacherDashboard() {
   const [stats, setStats] = useState<StudentStat[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Initialize Supabase only on client side to prevent prerendering crashes
+  const supabase = useMemo<SupabaseClient | null>(() => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) return null;
+    return createClient(supabaseUrl, supabaseKey);
+  }, []);
+
   // Authenticate simple password
   function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -36,6 +41,7 @@ export default function TeacherDashboard() {
   }
 
   async function fetchData() {
+    if (!supabase) return alert("Error de configuración de Supabase");
     setLoading(true);
     try {
       // 1. Get all students
@@ -99,6 +105,7 @@ export default function TeacherDashboard() {
 
   // Download full raw attempts log
   async function downloadAttemptsLog() {
+    if (!supabase) return alert("Error de configuración de Supabase");
     try {
       const { data, error } = await supabase
         .from("attempts")
@@ -121,6 +128,7 @@ export default function TeacherDashboard() {
 
   // Download chat logs
   async function downloadChatLogs() {
+    if (!supabase) return alert("Error de configuración de Supabase");
     try {
       const { data, error } = await supabase
         .from("chat_logs")
