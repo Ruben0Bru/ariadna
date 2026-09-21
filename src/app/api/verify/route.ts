@@ -99,25 +99,54 @@ interface ExerciseRecord {
 }
 
 const LOCAL_EXERCISES: ExerciseRecord[] = [
-  // ── Álgebra de derivadas ────────────────────────────────────────────────────
-  { id: 1,  node_id: "algebra_derivadas", correct_expr: "3*x^2 - 5*x + 2",       expected_answer: "6*x - 5",           exercise_type: "differentiate", variable: "x", prereq_on_fail: "leyes_exponentes", fail_reason: "regla de la potencia (baja el exponente y resta 1)" },
-  { id: 2,  node_id: "algebra_derivadas", correct_expr: "(x^2 - 1)*(x + 3)",      expected_answer: "3*x^2 + 6*x - 1",  exercise_type: "differentiate", variable: "x", prereq_on_fail: "factorizacion",    fail_reason: "expansión del producto algebraico antes de derivar" },
-  { id: 3,  node_id: "algebra_derivadas", correct_expr: "x^3 / x",                expected_answer: "2*x",              exercise_type: "differentiate", variable: "x", prereq_on_fail: "factorizacion",    fail_reason: "simplificar la fracción algebraica (x³/x = x²) antes de derivar" },
-  { id: 4,  node_id: "algebra_derivadas", correct_expr: "4*x^4 - 3*x^3 + 2*x - 7", expected_answer: "16*x^3 - 9*x^2 + 2", exercise_type: "differentiate", variable: "x", prereq_on_fail: "leyes_exponentes", fail_reason: "aplicar la regla de la potencia a cada término del polinomio" },
-  { id: 5,  node_id: "algebra_derivadas", correct_expr: "x^2 * x^3",              expected_answer: "5*x^4",            exercise_type: "differentiate", variable: "x", prereq_on_fail: "factorizacion",    fail_reason: "simplificar el producto x²·x³ = x⁵ antes de derivar" },
-  { id: 6,  node_id: "algebra_derivadas", correct_expr: "(2*x - 1)^2",            expected_answer: "8*x - 4",         exercise_type: "differentiate", variable: "x", prereq_on_fail: "factorizacion",    fail_reason: "expandir el cuadrado del binomio antes de derivar" },
-  { id: 7,  node_id: "algebra_derivadas", correct_expr: "5*x^3 - 2*x + 8",       expected_answer: "15*x^2 - 2",       exercise_type: "differentiate", variable: "x", prereq_on_fail: "leyes_exponentes", fail_reason: "la derivada de una constante es cero" },
   // ── Leyes de exponentes ─────────────────────────────────────────────────────
-  { id: 8,  node_id: "leyes_exponentes",  correct_expr: "x^3 * x^4",             expected_answer: "x^7",              exercise_type: "simplify",      variable: "x", prereq_on_fail: null, fail_reason: "multiplicación de potencias con igual base (suma de exponentes)" },
-  { id: 9,  node_id: "leyes_exponentes",  correct_expr: "x^5 / x^2",             expected_answer: "x^3",              exercise_type: "simplify",      variable: "x", prereq_on_fail: null, fail_reason: "división de potencias con igual base (resta de exponentes)" },
-  { id: 10, node_id: "leyes_exponentes",  correct_expr: "sqrt(x)",               expected_answer: "sqrt(x)",          exercise_type: "simplify",      variable: "x", prereq_on_fail: null, fail_reason: "conversión de raíz a exponente fraccionario x^(1/2)" },
-  // ── Factorización ───────────────────────────────────────────────────────────
-  { id: 11, node_id: "factorizacion",     correct_expr: "(x - 2)*(x + 2)",       expected_answer: "x^2 - 4",          exercise_type: "simplify",      variable: "x", prereq_on_fail: null, fail_reason: "diferencia de cuadrados: (a-b)(a+b) = a² - b²" },
-  { id: 12, node_id: "factorizacion",     correct_expr: "(x + 3)^2",             expected_answer: "x^2 + 6*x + 9",   exercise_type: "simplify",      variable: "x", prereq_on_fail: null, fail_reason: "cuadrado del binomio: (a+b)² = a² + 2ab + b²" },
-  { id: 13, node_id: "factorizacion",     correct_expr: "x*(x^2 + 5)",           expected_answer: "x^3 + 5*x",        exercise_type: "simplify",      variable: "x", prereq_on_fail: null, fail_reason: "distributiva: a(b+c) = ab + ac" },
-  // ── Regla de la cadena ──────────────────────────────────────────────────────
-  { id: 14, node_id: "regla_cadena",      correct_expr: "(2*x + 1)^3",           expected_answer: "6*(2*x + 1)^2",   exercise_type: "differentiate", variable: "x", prereq_on_fail: "algebra_derivadas", fail_reason: "regla de la cadena: f(g(x))' = f'(g(x)) · g'(x)" },
+  { id: 8,  node_id: "leyes_exponentes",  correct_expr: "x^3 * x^4",       expected_answer: "x^7",              exercise_type: "simplify",       variable: "x", prereq_on_fail: null,           fail_reason: "multiplicación de potencias con igual base (xᵃ·xᵇ=xᵃ⁺ᵇ)" },
+  { id: 9,  node_id: "leyes_exponentes",  correct_expr: "x^5 / x^2",       expected_answer: "x^3",              exercise_type: "simplify",       variable: "x", prereq_on_fail: null,           fail_reason: "división de potencias con igual base (xᵃ/xᵇ=xᵃ⁻ᵇ)" },
+  { id: 10, node_id: "leyes_exponentes",  correct_expr: "(x^2)^3",         expected_answer: "x^6",              exercise_type: "simplify",       variable: "x", prereq_on_fail: null,           fail_reason: "potencia de potencia: (xᵃ)ᵇ=xᵃᵇ" },
+  { id: 15, node_id: "leyes_exponentes",  correct_expr: "x^(-2)",          expected_answer: "1/x^2",            exercise_type: "simplify",       variable: "x", prereq_on_fail: null,           fail_reason: "exponente negativo: x⁻ⁿ=1/xⁿ" },
+  { id: 16, node_id: "leyes_exponentes",  correct_expr: "sqrt(x)",         expected_answer: "sqrt(x)",          exercise_type: "simplify",       variable: "x", prereq_on_fail: null,           fail_reason: "raíz cuadrada como exponente fraccionario" },
+
+  // ── Factorización ────────────────────────────────────────────────────────────
+  { id: 11, node_id: "factorizacion",     correct_expr: "(x-2)*(x+2)",     expected_answer: "x^2 - 4",          exercise_type: "simplify",       variable: "x", prereq_on_fail: null,           fail_reason: "diferencia de cuadrados: (a-b)(a+b)=a²-b²" },
+  { id: 12, node_id: "factorizacion",     correct_expr: "(x+3)^2",         expected_answer: "x^2 + 6*x + 9",   exercise_type: "simplify",       variable: "x", prereq_on_fail: null,           fail_reason: "cuadrado del binomio: (a+b)²=a²+2ab+b²" },
+  { id: 13, node_id: "factorizacion",     correct_expr: "x*(x^2 + 5)",     expected_answer: "x^3 + 5*x",        exercise_type: "simplify",       variable: "x", prereq_on_fail: null,           fail_reason: "distributiva: a(b+c)=ab+ac" },
+  { id: 17, node_id: "factorizacion",     correct_expr: "(2*x-1)^2",       expected_answer: "4*x^2 - 4*x + 1", exercise_type: "simplify",       variable: "x", prereq_on_fail: null,           fail_reason: "cuadrado del binomio con coeficiente" },
+  { id: 18, node_id: "factorizacion",     correct_expr: "(x+1)*(x^2-x+1)", expected_answer: "x^3 + 1",          exercise_type: "simplify",       variable: "x", prereq_on_fail: null,           fail_reason: "suma de cubos: (a+b)(a²-ab+b²)=a³+b³" },
+
+  // ── Definición de derivada ────────────────────────────────────────────────────
+  { id: 19, node_id: "definicion_derivada", correct_expr: "7",             expected_answer: "0",                exercise_type: "simplify",       variable: "x", prereq_on_fail: "leyes_exponentes", fail_reason: "la derivada de una constante es siempre cero" },
+  { id: 20, node_id: "definicion_derivada", correct_expr: "4*x",           expected_answer: "4",                exercise_type: "simplify",       variable: "x", prereq_on_fail: "leyes_exponentes", fail_reason: "la derivada de ax es su coeficiente a" },
+  { id: 21, node_id: "definicion_derivada", correct_expr: "x",             expected_answer: "1",                exercise_type: "simplify",       variable: "x", prereq_on_fail: "leyes_exponentes", fail_reason: "la derivada de x es 1" },
+  { id: 23, node_id: "definicion_derivada", correct_expr: "3*x + 5",       expected_answer: "3",                exercise_type: "simplify",       variable: "x", prereq_on_fail: "leyes_exponentes", fail_reason: "la derivada de mx+b es la pendiente m" },
+
+  // ── Regla de la potencia (antes: algebra_derivadas) ───────────────────────────
+  { id: 1,  node_id: "regla_potencia",    correct_expr: "3*x^2 - 5*x + 2",  expected_answer: "6*x - 5",           exercise_type: "differentiate",  variable: "x", prereq_on_fail: "leyes_exponentes", fail_reason: "regla de la potencia: d/dx[xⁿ]=n·xⁿ⁻¹" },
+  { id: 4,  node_id: "regla_potencia",    correct_expr: "4*x^4 - 3*x^3 + 2*x - 7", expected_answer: "16*x^3 - 9*x^2 + 2", exercise_type: "differentiate", variable: "x", prereq_on_fail: "leyes_exponentes", fail_reason: "aplica la regla de la potencia a cada término" },
+  { id: 7,  node_id: "regla_potencia",    correct_expr: "5*x^3 - 2*x + 8",  expected_answer: "15*x^2 - 2",       exercise_type: "differentiate",  variable: "x", prereq_on_fail: "leyes_exponentes", fail_reason: "la derivada de la constante 8 es cero" },
+  { id: 24, node_id: "regla_potencia",    correct_expr: "x^2 * x^3",        expected_answer: "5*x^4",            exercise_type: "differentiate",  variable: "x", prereq_on_fail: "factorizacion",    fail_reason: "simplificar x²·x³=x⁵ antes de derivar" },
+  { id: 25, node_id: "regla_potencia",    correct_expr: "x^3 / x",          expected_answer: "2*x",              exercise_type: "differentiate",  variable: "x", prereq_on_fail: "factorizacion",    fail_reason: "simplificar x³/x=x² antes de aplicar la regla" },
+  { id: 26, node_id: "regla_potencia",    correct_expr: "(2*x - 1)^2",      expected_answer: "8*x - 4",          exercise_type: "differentiate",  variable: "x", prereq_on_fail: "factorizacion",    fail_reason: "expandir el cuadrado del binomio antes de derivar" },
+  { id: 27, node_id: "regla_potencia",    correct_expr: "(x^2 - 1)*(x + 3)",expected_answer: "3*x^2 + 6*x - 1", exercise_type: "differentiate",  variable: "x", prereq_on_fail: "factorizacion",    fail_reason: "expansión del producto algebraico antes de derivar" },
+
+  // ── Regla del producto ─────────────────────────────────────────────────────────
+  { id: 28, node_id: "regla_producto",    correct_expr: "x^2 * (x + 3)",            expected_answer: "3*x^2 + 6*x",    exercise_type: "differentiate", variable: "x", prereq_on_fail: "regla_potencia", fail_reason: "regla del producto: (uv)'=u'v+uv'" },
+  { id: 29, node_id: "regla_producto",    correct_expr: "(2*x + 1)*(x^2 - 4)",      expected_answer: "6*x^2 + 2*x - 8", exercise_type: "differentiate", variable: "x", prereq_on_fail: "regla_potencia", fail_reason: "regla del producto con binomios" },
+  { id: 30, node_id: "regla_producto",    correct_expr: "x^4 * (x + 2)",            expected_answer: "5*x^4 + 8*x^3",  exercise_type: "differentiate", variable: "x", prereq_on_fail: "regla_potencia", fail_reason: "u=x⁴, v=x+2, u'=4x³, v'=1" },
+  { id: 31, node_id: "regla_producto",    correct_expr: "(3*x^2 - 1)*(x^2 + 4)",   expected_answer: "12*x^3 + 22*x",  exercise_type: "differentiate", variable: "x", prereq_on_fail: "regla_potencia", fail_reason: "aplicar la regla del producto y simplificar términos" },
+
+  // ── Regla del cociente ─────────────────────────────────────────────────────────
+  { id: 32, node_id: "regla_cociente",    correct_expr: "x^2 / (x + 1)",            expected_answer: "(x^2 + 2*x) / (x+1)^2", exercise_type: "differentiate", variable: "x", prereq_on_fail: "regla_producto", fail_reason: "regla del cociente: (u/v)'=(u'v−uv')/v²" },
+  { id: 33, node_id: "regla_cociente",    correct_expr: "(x + 1) / x^2",            expected_answer: "-(x + 2) / x^3",         exercise_type: "differentiate", variable: "x", prereq_on_fail: "regla_producto", fail_reason: "u=x+1, v=x², aplicar (u'v−uv')/v²" },
+  { id: 34, node_id: "regla_cociente",    correct_expr: "x / (x^2 + 1)",            expected_answer: "(1 - x^2) / (x^2+1)^2", exercise_type: "differentiate", variable: "x", prereq_on_fail: "regla_producto", fail_reason: "numerador: 1·(x²+1) − x·2x" },
+  { id: 35, node_id: "regla_cociente",    correct_expr: "(2*x - 3) / (x + 2)",      expected_answer: "7 / (x+2)^2",            exercise_type: "differentiate", variable: "x", prereq_on_fail: "regla_producto", fail_reason: "numerador tras cociente: 2(x+2)−(2x−3)·1=7" },
+
+  // ── Regla de la cadena ─────────────────────────────────────────────────────────
+  { id: 14, node_id: "regla_cadena",     correct_expr: "(2*x + 1)^3",       expected_answer: "6*(2*x+1)^2",            exercise_type: "differentiate", variable: "x", prereq_on_fail: "regla_potencia", fail_reason: "exterior: 3u², interior: (2x+1)'=2" },
+  { id: 36, node_id: "regla_cadena",     correct_expr: "(x^2 + 1)^4",       expected_answer: "8*x*(x^2+1)^3",          exercise_type: "differentiate", variable: "x", prereq_on_fail: "regla_potencia", fail_reason: "exterior: 4u³, interior: (x²+1)'=2x" },
+  { id: 37, node_id: "regla_cadena",     correct_expr: "(3*x - 5)^2",       expected_answer: "6*(3*x-5)",              exercise_type: "differentiate", variable: "x", prereq_on_fail: "factorizacion",  fail_reason: "exterior: 2u, interior: (3x-5)'=3" },
+  { id: 38, node_id: "regla_cadena",     correct_expr: "(x^3 + 2*x)^5",     expected_answer: "5*(x^3+2*x)^4*(3*x^2+2)", exercise_type: "differentiate", variable: "x", prereq_on_fail: "regla_potencia", fail_reason: "interior: (x³+2x)'=3x²+2" },
 ];
+
 
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();

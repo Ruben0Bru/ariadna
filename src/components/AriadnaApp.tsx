@@ -7,6 +7,7 @@ import { getSession, clearSession, saveSession, type StudentSession } from "@/li
 import ThreadMap from "@/components/ThreadMap";
 import FeedbackBox from "@/components/FeedbackBox";
 import ConceptCard from "@/components/ConceptCard";
+import ChatPanel from "@/components/ChatPanel";
 
 type FeedbackState = "hidden" | "ok" | "warn";
 
@@ -449,6 +450,12 @@ export default function AriadnaApp() {
         </div>
       </div>
 
+      <ChatPanel
+        currentNode={currentNodeId}
+        currentNodeLabel={DAG[currentNodeId]?.label ?? currentNodeId}
+        currentExercise={ex?.prompt}
+      />
+
       <footer>
         Ariadna — Universidad de Córdoba, Ingeniería de Sistemas. La verificación es
         matemática real (mathjs). El LLM sólo redacta el texto pedagógico, nunca evalúa matemáticamente.
@@ -456,3 +463,4 @@ export default function AriadnaApp() {
     </>
   );
 }
+
