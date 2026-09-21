@@ -14,9 +14,10 @@ interface ChatPanelProps {
   currentNode: string;
   currentNodeLabel: string;
   currentExercise?: string;
+  groupId: number;
 }
 
-export default function ChatPanel({ currentNode, currentNodeLabel, currentExercise }: ChatPanelProps) {
+export default function ChatPanel({ currentNode, currentNodeLabel, currentExercise, groupId }: ChatPanelProps) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -52,6 +53,7 @@ export default function ChatPanel({ currentNode, currentNodeLabel, currentExerci
           currentNode,
           currentNodeLabel,
           currentExercise,
+          groupId,
         }),
       });
       const data = await res.json();

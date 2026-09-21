@@ -454,6 +454,7 @@ export default function AriadnaApp() {
         currentNode={currentNodeId}
         currentNodeLabel={DAG[currentNodeId]?.label ?? currentNodeId}
         currentExercise={ex?.prompt}
+        groupId={session.groupId}
       />
 
       <footer>

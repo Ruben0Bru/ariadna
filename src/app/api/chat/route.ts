@@ -15,6 +15,7 @@ interface ChatBody {
   currentNode: string;           // Nodo activo del estudiante (ej: "regla_cadena")
   currentNodeLabel: string;      // Nombre legible del nodo
   currentExercise?: string;      // Enunciado del ejercicio actual (solo para contexto)
+  groupId?: number;              // Grupo experimental (para lógica diferenciada)
 }
 
 const NODE_CONTEXT: Record<string, string> = {
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
-  const { messages, currentNode, currentNodeLabel, currentExercise } = body;
+  const { messages, currentNode, currentNodeLabel, currentExercise, groupId = 3 } = body;
 
   if (!messages || messages.length === 0) {
     return NextResponse.json({ error: "Sin mensajes" }, { status: 400 });
@@ -50,20 +51,27 @@ export async function POST(req: NextRequest) {
 
   const nodeCtx = NODE_CONTEXT[currentNode] ?? currentNodeLabel;
 
+  // Lógica diferenciada por grupo experimental (RF-15 y RF-13)
+  const isStrictTutor = groupId === 2 || groupId === 3;
+
+  const rules = isStrictTutor
+    ? `3. NUNCA resuelvas directamente el ejercicio que el estudiante está haciendo (si se menciona). En cambio, guía al estudiante con pistas socráticas o explica el concepto general con un ejemplo DIFERENTE.\n4. Si el estudiante pide la respuesta del ejercicio actual, niégate educadamente y ofrécele ayuda paso a paso.`
+    : `3. Eres un tutor liberal. Si el estudiante te pide la respuesta o que resuelvas el ejercicio que está haciendo "${currentExercise}", PUEDES RESOLVERLO paso a paso y darle la respuesta final sin restricciones.`;
+
   // Construir el system prompt de contexto
-  const systemPrompt = `Eres Ariadna, tutora socrática de Cálculo I universitario. Tu misión es ayudar al estudiante a ENTENDER, no darle las respuestas.
+  const systemPrompt = `Eres Ariadna, tutora de Cálculo I universitario. Tu misión secundaria es ayudar al estudiante a entender.
 
 **CONTEXTO DEL ESTUDIANTE:**
 - Nodo activo: "${currentNodeLabel}" (${nodeCtx})
 ${currentExercise ? `- Ejercicio actual que está resolviendo: "${currentExercise}"` : ""}
+- Tu comportamiento (Módulo Experimental): ${isStrictTutor ? "TUTOR SOCRÁTICO ESTRICTO" : "ASISTENTE DIRECTO LIBERAL"}
 
 **REGLAS ESTRICTAS:**
 1. Solo respondes preguntas de matemáticas, específicamente de Cálculo I y sus prerrequisitos algebraicos.
-2. Si el estudiante pregunta algo fuera de matemáticas, responde: "Solo puedo ayudarte con dudas de Cálculo I y álgebra."
-3. NUNCA resuelvas directamente el ejercicio que el estudiante está haciendo (si se menciona). En cambio, explica el concepto general con un ejemplo DIFERENTE.
-4. Usa formato Markdown y LaTeX con $...$ para fórmulas inline y $$...$$ para ecuaciones en bloque.
-5. Sé conciso: máximo 200 palabras por respuesta. Si el estudiante necesita más, puede preguntar de nuevo.
-6. Tono: cálido, socrático, cercano. Termina con una pregunta de reflexión cuando sea útil.`;
+2. Si el estudiante pregunta algo fuera de matemáticas (como juegos, clima o cosas de la API), responde: "Solo puedo ayudarte con dudas de Cálculo I y álgebra."
+${rules}
+5. Usa formato Markdown y LaTeX con $...$ para fórmulas inline y $$...$$ para ecuaciones en bloque.
+6. Sé conciso: máximo 200 palabras por respuesta.`;
 
   // Construir el historial de mensajes para Gemini
   const geminiContents = [
