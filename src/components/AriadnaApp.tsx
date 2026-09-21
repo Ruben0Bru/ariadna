@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { DAG, DAG_ORDER, EXERCISES, CONCEPTS, type Exercise } from "@/lib/dag";
+import { DAG, DAG_ORDER, EXERCISES, CONCEPTS, DEFAULT_NODE, type Exercise } from "@/lib/dag";
 import { getSession, clearSession, saveSession, type StudentSession } from "@/lib/session";
 import ThreadMap from "@/components/ThreadMap";
 import FeedbackBox from "@/components/FeedbackBox";
@@ -33,7 +33,7 @@ export default function AriadnaApp() {
   const [showingConcept, setShowingConcept] = useState(false);
 
   // ── Estado de ejercicios ────────────────────────────────────────────────────
-  const [activeNode, setActiveNode] = useState<string>("algebra_derivadas");
+  const [activeNode, setActiveNode] = useState<string>(DEFAULT_NODE);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [current, setCurrent] = useState(0);
   const [masteredNodes, setMasteredNodes] = useState<Set<string>>(new Set());
@@ -218,8 +218,8 @@ export default function AriadnaApp() {
   function handleNext() {
     if (current < exercises.length - 1) {
       setCurrent(c => c + 1);
-    } else if (activeNode !== "algebra_derivadas") {
-      setActiveNode("algebra_derivadas");
+    } else if (activeNode !== DEFAULT_NODE) {
+      setActiveNode(DEFAULT_NODE);
     }
   }
 
@@ -233,7 +233,7 @@ export default function AriadnaApp() {
     if (reviewNode) { setActiveNode(reviewNode); setReviewNode(null); }
   }
 
-  function handleReturnEarly() { setActiveNode("algebra_derivadas"); }
+  function handleReturnEarly() { setActiveNode(DEFAULT_NODE); }
 
   function handleLogout() { clearSession(); window.location.href = "/login"; }
 
@@ -245,8 +245,8 @@ export default function AriadnaApp() {
   function handleContinueAfterMastery() {
     setJustMastered(false);
     // Si estaba en un nodo de repaso, regresar al principal
-    if (activeNode !== "algebra_derivadas") {
-      setActiveNode("algebra_derivadas");
+    if (activeNode !== DEFAULT_NODE) {
+      setActiveNode(DEFAULT_NODE);
     } else {
       // Avanzar al siguiente nodo no dominado del DAG
       const next = DAG_ORDER.find(n => !masteredNodes.has(n) && n !== activeNode);
@@ -264,7 +264,7 @@ export default function AriadnaApp() {
   }
 
   // RF-15: Pantalla de sesión completada (Grupo 2)
-  if (session.groupId === 2 && current >= exercises.length && exercises.length > 0 && activeNode === "algebra_derivadas" && !justMastered) {
+  if (session.groupId === 2 && current >= exercises.length && exercises.length > 0 && activeNode === DEFAULT_NODE && !justMastered) {
     return (
       <div style={{ textAlign: "center", padding: "80px 20px", color: "var(--text-main)" }}>
         <h2 style={{ fontSize: "1.8rem", marginBottom: "12px" }}>Sesión completada 🎓</h2>
@@ -393,7 +393,7 @@ export default function AriadnaApp() {
 
         {failedAttempts >= 3 && !checking && feedbackState !== "ok" && (
           <div style={{ marginTop: "10px", textAlign: "right", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-            {activeNode !== "algebra_derivadas" && (
+            {activeNode !== DEFAULT_NODE && (
               <button
                 onClick={handleReturnEarly}
                 style={{ background: "transparent", border: "1px solid var(--accent)", color: "var(--accent-glow)", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "0.9rem" }}
@@ -410,7 +410,7 @@ export default function AriadnaApp() {
           </div>
         )}
 
-        {activeNode !== "algebra_derivadas" && failedAttempts < 3 && !checking && feedbackState !== "ok" && (
+        {activeNode !== DEFAULT_NODE && failedAttempts < 3 && !checking && feedbackState !== "ok" && (
           <div style={{ marginTop: "10px", textAlign: "right" }}>
             <button
               onClick={handleReturnEarly}
