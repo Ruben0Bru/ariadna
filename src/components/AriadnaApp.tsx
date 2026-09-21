@@ -57,7 +57,7 @@ export default function AriadnaApp() {
   // ── Verificar sesión al montar ──────────────────────────────────────────────
   useEffect(() => {
     const s = getSession();
-    if (!s) { router.replace("/login"); return; }
+    if (!s) { window.location.href = "/login"; return; }
     setSession(s);
     // RF-18: Restaurar progreso de sesiones anteriores
     if (s.masteredNodes?.length) {
@@ -235,7 +235,7 @@ export default function AriadnaApp() {
 
   function handleReturnEarly() { setActiveNode("algebra_derivadas"); }
 
-  function handleLogout() { clearSession(); router.replace("/login"); }
+  function handleLogout() { clearSession(); window.location.href = "/login"; }
 
   function handleConceptDone() {
     setConceptShown(prev => new Set([...prev, activeNode]));
