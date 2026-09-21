@@ -19,10 +19,11 @@ on conflict (id) do nothing;
 
 -- 2. Estudiantes — identificados por código, no por login tradicional (RF-14)
 create table if not exists students (
-  id         uuid primary key default gen_random_uuid(),
-  code       text not null unique,        -- código asignado en el reclutamiento, ej. "G2-014"
-  group_id   smallint not null references groups(id),
-  created_at timestamptz not null default now()
+  id             uuid primary key default gen_random_uuid(),
+  code           text not null unique,        -- código asignado en el reclutamiento, ej. "G2-014"
+  group_id       smallint not null references groups(id),
+  mastered_nodes text[] not null default '{}', -- array de nodos ya dominados
+  created_at     timestamptz not null default now()
 );
 
 -- 3. Nodos del grafo de conocimiento (RF-01)
@@ -44,8 +45,8 @@ create table if not exists node_edges (
 create table if not exists exercises (
   id           serial primary key,
   node_id      text not null references nodes(id),
-  prompt       text not null,             -- enunciado mostrado al estudiante, ej. "f(x) = 3x^2 - 5x + 2"
-  correct_expr text not null,            -- f(x) SIN derivar; el backend deriva con SymPy
+  prompt       text not null,             -- enunciado mostrado al estudiante
+  correct_expr text not null,             -- f(x) SIN derivar; o string plano para simplify
   variable     text not null default 'x',
   prereq_on_fail text references nodes(id),
   fail_reason  text,
@@ -53,7 +54,6 @@ create table if not exists exercises (
 );
 
 -- 6. Intentos — el dato crudo que alimenta el análisis de la tesis (RF-16, RNF-04)
--- ⚠️  Este esquema NO puede cambiar una vez arranque la intervención (S8).
 create table if not exists attempts (
   id              bigserial primary key,
   student_id      uuid not null references students(id),
@@ -71,6 +71,26 @@ create table if not exists attempts (
 create index if not exists idx_attempts_student  on attempts(student_id);
 create index if not exists idx_attempts_exercise on attempts(exercise_id);
 create index if not exists idx_attempts_created  on attempts(created_at);
+
+-- 7. Chat Logs — Registro de los prompts libres al tutor (NUEVO)
+create table if not exists chat_logs (
+  id              bigserial primary key,
+  student_id      uuid not null references students(id),
+  node_context    text not null,
+  user_prompt     text not null,
+  ai_response     text not null,
+  created_at      timestamptz not null default now()
+);
+
+create index if not exists idx_chat_student on chat_logs(student_id);
+
+-- 8. Mastery Logs — Registro exacto de cuándo dominó un nodo (NUEVO)
+create table if not exists mastery_logs (
+  id              bigserial primary key,
+  student_id      uuid not null references students(id),
+  node_id         text not null references nodes(id),
+  created_at      timestamptz not null default now()
+);
 
 -- ============================================================
 -- Datos semilla: DAG recortado de Unidad 3 + Pre-Cálculo
@@ -142,6 +162,18 @@ insert into exercises (node_id, prompt, correct_expr, prereq_on_fail, fail_reaso
   ('regla_cadena', 'Deriva usando regla de la cadena: f(x) = (2x + 1)³',
    '6*(2*x + 1)**2', 'algebra_derivadas', 'aplicar derivada de la función externa multiplicada por la derivada de la interna (2)')
 on conflict do nothing;
+
+-- ============================================================
+-- Funciones Auxiliares (RPC)
+-- ============================================================
+create or replace function append_mastered_node(p_student_id uuid, p_node_id text)
+returns void as $$
+begin
+  update students
+  set mastered_nodes = array_append(mastered_nodes, p_node_id)
+  where id = p_student_id and not (mastered_nodes @> array[p_node_id]::text[]);
+end;
+$$ language plpgsql;
 
 -- ============================================================
 -- Nota de seguridad (RNF-06): activar RLS antes de S8.

@@ -248,6 +248,38 @@ export async function POST(req: NextRequest) {
   // 3. Persistir el intento (RF-16) ──────────────────────────────────────────
   let attemptId: number | null = null;
   if (supabase && exerciseFromDb) {
+    let totalCorrect = 0;
+    const { data: priorAttempts } = await supabase
+      .from("attempts")
+      .select("is_correct")
+      .eq("student_id", studentId)
+      .eq("node_id", exercise.node_id)
+      .order("id", { ascending: false })
+      .limit(5);
+
+    if (priorAttempts) {
+      for (const pa of priorAttempts) {
+        if (pa.is_correct) totalCorrect++;
+        else break;
+      }
+    }
+
+    const currentCorrect = isCorrect ? totalCorrect + 1 : 0;
+
+    if (isCorrect && currentCorrect >= 3) {
+      // Estudiante acaba de dominar el nodo. Lo insertamos en la BD.
+      supabase.from("mastery_logs").insert({
+        student_id: studentId,
+        node_id: exercise.node_id
+      }).then(); // Fire-and-forget
+
+      // También inicializamos el array de nodos dominados pre-generado vía un RPC o array append.
+      supabase.rpc("append_mastered_node", {
+        p_student_id: studentId,
+        p_node_id: exercise.node_id
+      }).then();
+    }
+
     const { data: attempt, error: insertErr } = await supabase
       .from("attempts")
       .insert({

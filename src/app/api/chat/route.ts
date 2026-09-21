@@ -16,6 +16,7 @@ interface ChatBody {
   currentNodeLabel: string;      // Nombre legible del nodo
   currentExercise?: string;      // Enunciado del ejercicio actual (solo para contexto)
   groupId?: number;              // Grupo experimental (para lógica diferenciada)
+  studentId?: string;            // UUID del estudiante (para logs)
 }
 
 const NODE_CONTEXT: Record<string, string> = {
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
-  const { messages, currentNode, currentNodeLabel, currentExercise, groupId = 3 } = body;
+  const { messages, currentNode, currentNodeLabel, currentExercise, groupId = 3, studentId } = body;
 
   if (!messages || messages.length === 0) {
     return NextResponse.json({ error: "Sin mensajes" }, { status: 400 });
@@ -118,6 +119,34 @@ ${rules}
         .trim() ?? "";
 
     if (!reply) throw new Error("Gemini devolvió respuesta vacía");
+
+    // =========================================================================
+    // LOGGER DE CHAT EN BASE DE DATOS (NUEVO)
+    // =========================================================================
+    try {
+      // Intentamos extraer el studentId del último mensaje o usar un fallback temporal
+      // ya que body no tiene explícitamente studentId todavía (requeriría actializar App.tsx)
+      const { studentId } = body;
+      if (studentId) {
+        const { createClient } = require("@supabase/supabase-js");
+        const sb = createClient(
+          process.env.SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        
+        // Log fire-and-forget
+        sb.from("chat_logs").insert({
+          student_id: studentId,
+          node_context: currentNode,
+          user_prompt: messages[messages.length - 1].content,
+          ai_response: reply
+        }).then(({ error }: any) => {
+          if (error) console.error("[Ariadna/chat] Supabase insert error:", error);
+        });
+      }
+    } catch (e) {
+      console.error("[Ariadna/chat] Fallo al loguear en BD:", e);
+    }
 
     return NextResponse.json({ reply });
   } catch (e) {
