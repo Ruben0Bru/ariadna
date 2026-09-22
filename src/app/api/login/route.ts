@@ -65,11 +65,19 @@ export async function POST(req: NextRequest) {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  const { data: existing } = await supabase
+  const { data: existing, error: selectError } = await supabase
     .from("students")
     .select("id, group_id, mastered_nodes")
     .eq("code", code)
     .maybeSingle();
+
+  if (selectError) {
+    console.error("[Ariadna/login] Error en lectura de estudiante:", selectError);
+    return NextResponse.json(
+      { error: `Error DB en lectura: ${selectError.message}. Verifica que la columna mastered_nodes exista.` },
+      { status: 500 }
+    );
+  }
 
   let studentId: string;
   let resolvedGroupId: number;
@@ -89,7 +97,7 @@ export async function POST(req: NextRequest) {
     if (error || !created) {
       console.error("[Ariadna/login] Error al crear estudiante:", error);
       return NextResponse.json(
-        { error: `Error DB: ${error?.message ?? "Desconocido"}` },
+        { error: `Error DB insert: ${error?.message ?? "Desconocido"}` },
         { status: 500 }
       );
     }

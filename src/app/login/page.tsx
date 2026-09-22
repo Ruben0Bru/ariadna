@@ -1,14 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { saveSession, saveTeacherSession, isTeacherCode } from "@/lib/session";
 
 export default function LoginPage() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [classActive, setClassActive] = useState(false);
 
   const codeIsTeacher = isTeacherCode(code);
+
+  const supabase = useMemo<SupabaseClient | null>(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return null;
+    return createClient(url, key);
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    async function checkClassSession() {
+      const { data } = await supabase!
+        .from("class_sessions")
+        .select("id")
+        .eq("active", true)
+        .limit(1)
+        .maybeSingle();
+      if (data) setClassActive(true);
+    }
+    checkClassSession();
+  }, [supabase]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -84,6 +107,16 @@ export default function LoginPage() {
   return (
     <div className="login-container">
       <div className="login-card">
+        {classActive && (
+          <div style={{ background: "rgba(91,169,127,0.15)", border: "1px solid var(--ok)", borderRadius: "8px", padding: "12px 16px", marginBottom: "20px", display: "flex", alignItems: "center", gap: "12px", color: "var(--ok)" }}>
+            <span style={{ fontSize: "1.5rem" }}>🏫</span>
+            <div>
+              <strong style={{ display: "block", fontSize: "0.95rem" }}>Sesión de Taller Activa</strong>
+              <span style={{ fontSize: "0.85rem", opacity: 0.9 }}>Ingresa para resolver los ejercicios del profesor.</span>
+            </div>
+          </div>
+        )}
+
         <div className="login-brand">
           <div className="eyebrow">ARIADNA — TUTOR INTELIGENTE / CÁLCULO I</div>
           <h1>
@@ -118,7 +151,7 @@ export default function LoginPage() {
 
           {codeIsTeacher && !error && (
             <div style={{ fontSize: "0.82rem", color: "var(--text-dim)", marginTop: "6px" }}>
-              Accederás al panel de docente donde puedes ver el progreso de tus estudiantes y asignar ejercicios.
+              Accederás al panel de docente donde puedes ver el progreso y asignar ejercicios.
             </div>
           )}
 
@@ -143,7 +176,7 @@ export default function LoginPage() {
 
         <p className="login-hint">
           Estudiantes: <code>G1-001</code>, <code>G2-014</code>, <code>G3-032</code>.<br />
-          Docentes: <code>PROF-001</code>. Si no tienes tu código, consulta a Rubén.
+          Docentes: <code>PROF-001</code>.
         </p>
       </div>
     </div>

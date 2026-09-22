@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { DAG, DAG_ORDER, EXERCISES, CONCEPTS, DEFAULT_NODE, type Exercise } from "@/lib/dag";
+import { DAG, DAG_ORDER, CONCEPTS, DEFAULT_NODE, type Exercise } from "@/lib/dag";
 import { getSession, clearSession, saveSession, type StudentSession } from "@/lib/session";
 import ThreadMap from "@/components/ThreadMap";
 import FeedbackBox from "@/components/FeedbackBox";
@@ -44,6 +44,7 @@ export default function AriadnaApp() {
   const isReviewMode = activeNode !== mainNodeRef.current;
 
   // ── Estado de ejercicios ────────────────────────────────────────────────────
+  const [allExercises, setAllExercises] = useState<Exercise[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [current, setCurrent] = useState(0);
 
@@ -81,9 +82,37 @@ export default function AriadnaApp() {
       mainNodeRef.current = firstAvailable;
     }
 
+    // Cargar Banco de Ejercicios desde Supabase
+    fetchAllExercises();
+
     // Verificar si hay clase activa del docente
     checkClassSession();
   }, [router]);
+
+  async function fetchAllExercises() {
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseKey) return;
+      const { createClient } = await import("@supabase/supabase-js");
+      const sb = createClient(supabaseUrl, supabaseKey);
+      
+      const { data } = await sb.from("exercises").select("id, prompt, correct_expr, expected_answer, node_id, prereq_on_fail, fail_reason");
+      if (data) {
+        const mapped: Exercise[] = data.map(dbEx => ({
+          id: dbEx.id,
+          prompt: dbEx.prompt,
+          expr: dbEx.expected_answer || dbEx.correct_expr,
+          node: dbEx.node_id,
+          prereqOnFail: dbEx.prereq_on_fail || "",
+          failReason: dbEx.fail_reason || "",
+        }));
+        setAllExercises(mapped);
+      }
+    } catch(e) {
+      console.error("Error cargando ejercicios BD", e);
+    }
+  }
 
   async function checkClassSession() {
     try {
@@ -128,13 +157,13 @@ export default function AriadnaApp() {
 
     if (classSessionActive && classExerciseIds && !isReviewMode) {
       // Clase activa: filtrar por IDs asignados por el docente para el nodo actual
-      pool = EXERCISES.filter(e => e.node === activeNode && classExerciseIds.includes(e.id));
+      pool = allExercises.filter(e => e.node === activeNode && classExerciseIds.includes(e.id));
       if (pool.length === 0) {
         // Si no hay ejercicios del docente para este nodo, usar banco normal
-        pool = EXERCISES.filter(e => e.node === activeNode);
+        pool = allExercises.filter(e => e.node === activeNode);
       }
     } else {
-      pool = EXERCISES.filter(e => e.node === activeNode);
+      pool = allExercises.filter(e => e.node === activeNode);
     }
 
     const limited = pool.slice(0, SESSION_LIMIT === Infinity ? undefined : SESSION_LIMIT);
@@ -149,7 +178,7 @@ export default function AriadnaApp() {
     } else {
       setCurrent(0);
     }
-  }, [activeNode, SESSION_LIMIT, classSessionActive, classExerciseIds]);
+  }, [activeNode, SESSION_LIMIT, classSessionActive, classExerciseIds, allExercises]);
 
   const ex: Exercise | undefined = exercises[current];
 
@@ -489,12 +518,10 @@ export default function AriadnaApp() {
           <span className="fn">{ex?.prompt}</span>
         </div>
 
-        {/* Pista de notación para el ejercicio actual */}
-        {ex?.expr && (
-          <div style={{ fontSize: "0.8rem", color: "var(--text-dim)", marginBottom: "8px", marginTop: "-4px" }}>
-            Escribe tu respuesta como: <code style={{ background: "rgba(255,255,255,0.07)", padding: "1px 6px", borderRadius: "4px" }}>{ex.expr}</code>
-          </div>
-        )}
+        {/* Pista de notación */}
+        <div style={{ fontSize: "0.8rem", color: "var(--text-dim)", marginBottom: "8px", marginTop: "-4px" }}>
+          💡 Recuerda usar <code style={{ background: "rgba(255,255,255,0.07)", padding: "1px 4px", borderRadius: "4px" }}>*</code> para multiplicar y <code style={{ background: "rgba(255,255,255,0.07)", padding: "1px 4px", borderRadius: "4px" }}>^</code> para exponentes (ej: <code style={{ background: "rgba(255,255,255,0.07)", padding: "1px 4px", borderRadius: "4px" }}>3*x^2</code>).
+        </div>
 
         <div className="input-row">
           <input

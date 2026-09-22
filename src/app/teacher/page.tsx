@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { getTeacherSession, clearTeacherSession } from "@/lib/session";
-import { EXERCISES, DAG, DAG_ORDER } from "@/lib/dag";
+import { DAG, DAG_ORDER, EXERCISES } from "@/lib/dag";
 
 interface StudentStat {
   student_id: string;
@@ -14,13 +14,14 @@ interface StudentStat {
   mastered_nodes: string[];
 }
 
-type Tab = "dashboard" | "session";
+type Tab = "dashboard" | "session" | "exercises";
 
 export default function TeacherDashboard() {
   const [tab, setTab] = useState<Tab>("dashboard");
   const [teacherSession, setTeacherSession] = useState<{ code: string; name: string } | null>(null);
   const [stats, setStats] = useState<StudentStat[]>([]);
   const [loading, setLoading] = useState(false);
+  const [dbExercises, setDbExercises] = useState<any[]>([]);
 
   // Class session state
   const [selectedNode, setSelectedNode] = useState<string>(DAG_ORDER[0]);
@@ -73,8 +74,39 @@ export default function TeacherDashboard() {
       });
 
       setStats(combined);
+
+      // Fetch Exercises
+      const { data: exData } = await supabase.from("exercises").select("*").order("id", { ascending: true });
+      if (exData) setDbExercises(exData);
     } catch (e) {
       console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSeedDatabase() {
+    if (!supabase) return;
+    setLoading(true);
+    try {
+      const inserts = EXERCISES.map((ex: any, i: number) => ({
+        id: i + 1, // force clean sequential IDs
+        node_id: ex.node,
+        correct_expr: ex.expr,
+        expected_answer: ex.expr,
+        exercise_type: "differentiate",
+        variable: "x",
+        prereq_on_fail: ex.prereqOnFail,
+        fail_reason: ex.failReason,
+        prompt: ex.prompt,
+        created_by_teacher_id: teacherSession?.code,
+      }));
+      const { error } = await supabase.from("exercises").upsert(inserts);
+      if (error) throw error;
+      alert("Base de datos sembrada con 20+ ejercicios base.");
+      await fetchData();
+    } catch (e: any) {
+      alert("Error plantando ejercicios: " + e.message);
     } finally {
       setLoading(false);
     }
@@ -180,7 +212,7 @@ export default function TeacherDashboard() {
 
   function handleLogout() { clearTeacherSession(); window.location.href = "/login"; }
 
-  const nodeExercises = EXERCISES.filter(e => e.node === selectedNode);
+  const nodeExercises = dbExercises.filter(e => e.node_id === selectedNode);
 
   const tabStyle = (t: Tab): React.CSSProperties => ({
     background: tab === t ? "rgba(212,166,87,0.15)" : "transparent",
@@ -230,6 +262,9 @@ export default function TeacherDashboard() {
           {sessionStatus === "active" && (
             <span style={{ marginLeft: "8px", background: "var(--ok)", color: "#fff", borderRadius: "10px", padding: "1px 7px", fontSize: "0.75rem" }}>ACTIVA</span>
           )}
+        </button>
+        <button style={tabStyle("exercises")} onClick={() => setTab("exercises")}>
+          ⚙️ Gestor de Ejercicios
         </button>
       </div>
 
@@ -352,20 +387,22 @@ export default function TeacherDashboard() {
                     background: selectedExercises.has(ex.id) ? "rgba(212,166,87,0.06)" : "transparent",
                     transition: "background 0.15s"
                   }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedExercises.has(ex.id)}
-                    onChange={() => toggleExercise(ex.id)}
-                    style={{ marginTop: "3px", accentColor: "var(--thread)", width: "16px", height: "16px", cursor: "pointer" }}
-                  />
-                  <div>
-                    <div style={{ color: "var(--thread)", fontSize: "0.95rem", marginBottom: "2px" }}>{ex.prompt}</div>
-                    <div style={{ color: "var(--text-dim)", fontSize: "0.78rem", fontFamily: "'JetBrains Mono', monospace" }}>
-                      Respuesta: {ex.expr} · ID #{ex.id}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedExercises.has(ex.id)}
+                      onChange={() => toggleExercise(ex.id)}
+                      style={{ marginTop: "3px", accentColor: "var(--thread)", width: "16px", height: "16px", cursor: "pointer" }}
+                    />
+                    <div>
+                      <div style={{ color: "var(--thread)", fontSize: "0.95rem", marginBottom: "2px" }}>
+                         (Expresión Correcta original: {ex.correct_expr})
+                      </div>
+                      <div style={{ color: "var(--text-dim)", fontSize: "0.78rem", fontFamily: "'JetBrains Mono', monospace" }}>
+                        Respuesta esperada: {ex.expected_answer} · ID #{ex.id}
+                      </div>
                     </div>
-                  </div>
-                </label>
+                  </label>
               ))
             )}
           </div>
@@ -398,6 +435,56 @@ export default function TeacherDashboard() {
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Tab: Gestor de Ejercicios ── */}
+      {tab === "exercises" && (
+        <div>
+          <h2 style={{ margin: "0 0 6px", fontSize: "1.2rem", color: "var(--text)" }}>Base de Datos de Ejercicios</h2>
+          <p style={{ color: "var(--text-dim)", fontSize: "0.9rem", marginBottom: "20px" }}>
+            Administra los ejercicios pedagógicos. Si la tabla está vacía, usa el botón rojo abajo para cargar los iniciales.
+          </p>
+          <div style={{ border: "1px solid var(--line)", borderRadius: "10px", overflow: "hidden", marginBottom: "20px" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+              <thead>
+                <tr style={{ background: "rgba(255,255,255,0.05)", borderBottom: "1px solid var(--line)" }}>
+                  <th style={{ padding: "14px 16px", color: "var(--text-dim)", fontSize: "0.85rem", fontWeight: 600 }}>ID</th>
+                  <th style={{ padding: "14px 16px", color: "var(--text-dim)", fontSize: "0.85rem", fontWeight: 600 }}>Nodo</th>
+                  <th style={{ padding: "14px 16px", color: "var(--text-dim)", fontSize: "0.85rem", fontWeight: 600 }}>CorrectExpr</th>
+                  <th style={{ padding: "14px 16px", color: "var(--text-dim)", fontSize: "0.85rem", fontWeight: 600 }}>Tipo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dbExercises.length === 0 && (
+                  <tr>
+                    <td colSpan={4} style={{ padding: "24px", textAlign: "center", color: "var(--text-dim)" }}>
+                      Base de datos VASCÍA. Presiona el botón de abajo.
+                    </td>
+                  </tr>
+                )}
+                {dbExercises.map(ex => (
+                  <tr key={ex.id} style={{ borderBottom: "1px solid var(--line)" }}>
+                    <td style={{ padding: "14px 16px", color: "var(--text-dim)" }}>#{ex.id}</td>
+                    <td style={{ padding: "14px 16px", color: "var(--thread)" }}>{ex.node_id}</td>
+                    <td style={{ padding: "14px 16px", fontFamily: "'JetBrains Mono', monospace", fontSize: "0.85rem" }}>{ex.correct_expr}</td>
+                    <td style={{ padding: "14px 16px", color: "var(--text-dim)", fontSize: "0.8rem" }}>{ex.exercise_type}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <button
+            onClick={handleSeedDatabase}
+            disabled={loading}
+            style={{
+              padding: "10px 20px", background: "rgba(255,50,50,0.15)", border: "1px solid var(--warn)", color: "var(--warn)", 
+              borderRadius: "8px", cursor: loading ? "wait" : "pointer"
+            }}
+          >
+            {loading ? "Sembrando..." : "⚠️ Sembrar Base de Datos (Emergency Seed)"}
+          </button>
         </div>
       )}
     </div>
