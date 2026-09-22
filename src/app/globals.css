@@ -129,12 +129,23 @@ h1 em {
 .node.mastered {
   border-color: var(--ok);
   color: var(--ok);
+  background: rgba(91, 169, 127, 0.08);
 }
 
 .node.review {
   border-color: var(--warn);
   color: var(--warn);
   animation: pulse 1.6s ease-in-out infinite;
+}
+
+.node.locked {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.node:not(.locked):hover {
+  border-color: var(--thread-dim);
+  filter: brightness(1.15);
 }
 
 @keyframes pulse {

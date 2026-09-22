@@ -181,3 +181,34 @@ $$ language plpgsql;
 -- alter table attempts enable row level security;
 -- alter table students enable row level security;
 -- (Configurar políticas según el consentimiento informado)
+
+-- ============================================================
+-- v1.1 — Módulo de Docentes y Sesiones de Clase
+-- ============================================================
+
+-- Tabla de docentes (identificados con código PROF-xxx)
+create table if not exists teachers (
+  id         uuid primary key default gen_random_uuid(),
+  code       text not null unique,   -- ej. "PROF-001"
+  name       text not null,          -- nombre visible en el dashboard
+  created_at timestamptz not null default now()
+);
+
+-- Seed: código del investigador principal
+insert into teachers (code, name) values
+  ('PROF-001', 'Docente 1')
+on conflict (code) do nothing;
+
+-- Tabla de sesiones de clase activas
+-- El docente selecciona un subconjunto de ejercicios; los estudiantes los ven en lugar del banco completo.
+create table if not exists class_sessions (
+  id           uuid primary key default gen_random_uuid(),
+  teacher_id   uuid references teachers(id),
+  exercise_ids jsonb not null default '[]',  -- array de exercise.id del lado de dag.ts
+  active       boolean not null default true,
+  created_at   timestamptz not null default now()
+);
+
+-- Índice para consulta rápida de sesión activa
+create index if not exists idx_class_sessions_active on class_sessions(active) where active = true;
+

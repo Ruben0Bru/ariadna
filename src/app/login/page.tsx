@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { saveSession } from "@/lib/session";
+import { saveSession, saveTeacherSession, isTeacherCode } from "@/lib/session";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const codeIsTeacher = isTeacherCode(code);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -21,6 +21,37 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
+    // ── Flujo de docente ────────────────────────────────────────────────────
+    if (isTeacherCode(trimmed)) {
+      try {
+        const res = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: trimmed }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          setError(data.error ?? "Código de docente no reconocido.");
+          return;
+        }
+
+        saveTeacherSession({
+          teacherId: data.teacherId,
+          code: trimmed,
+          name: data.name ?? trimmed,
+        });
+
+        window.location.href = "/teacher";
+      } catch {
+        setError("Error de conexión. Verifica tu internet e intenta de nuevo.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ── Flujo de estudiante ─────────────────────────────────────────────────
     try {
       const res = await fetch("/api/login", {
         method: "POST",
@@ -42,7 +73,7 @@ export default function LoginPage() {
         masteredNodes: data.masteredNodes ?? [],
       });
 
-      router.push("/");
+      window.location.href = "/";
     } catch {
       setError("Error de conexión. Verifica tu internet e intenta de nuevo.");
     } finally {
@@ -61,20 +92,19 @@ export default function LoginPage() {
             a través del cálculo.
           </h1>
           <p className="sub">
-            Ingresa el código de participante que te asignó tu docente para
-            comenzar la sesión.
+            Ingresa el código que te asignó tu docente para comenzar la sesión.
           </p>
         </div>
 
         <form onSubmit={handleLogin} className="login-form" noValidate>
           <label className="login-label" htmlFor="codeInput">
-            Código de participante
+            {codeIsTeacher ? "👩🏽‍🏫 Código de docente detectado" : "Código de acceso"}
           </label>
           <input
             id="codeInput"
             type="text"
             className="login-input"
-            placeholder="ej: G2-014"
+            placeholder="ej: G2-014 o PROF-001"
             value={code}
             onChange={(e) => {
               setCode(e.target.value);
@@ -85,6 +115,12 @@ export default function LoginPage() {
             spellCheck={false}
             disabled={loading}
           />
+
+          {codeIsTeacher && !error && (
+            <div style={{ fontSize: "0.82rem", color: "var(--text-dim)", marginTop: "6px" }}>
+              Accederás al panel de docente donde puedes ver el progreso de tus estudiantes y asignar ejercicios.
+            </div>
+          )}
 
           {error && <div className="login-error">{error}</div>}
 
@@ -97,6 +133,8 @@ export default function LoginPage() {
               <>
                 Verificando<span className="loading-dots" />
               </>
+            ) : codeIsTeacher ? (
+              "Acceder al Panel de Docente →"
             ) : (
               "Ingresar →"
             )}
@@ -104,8 +142,8 @@ export default function LoginPage() {
         </form>
 
         <p className="login-hint">
-          El código tiene formato <code>G1-001</code>, <code>G2-014</code> o{" "}
-          <code>G3-032</code>. Si no lo tienes, consulta con tu docente.
+          Estudiantes: <code>G1-001</code>, <code>G2-014</code>, <code>G3-032</code>.<br />
+          Docentes: <code>PROF-001</code>. Si no tienes tu código, consulta a Rubén.
         </p>
       </div>
     </div>
