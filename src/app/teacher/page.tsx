@@ -89,6 +89,17 @@ export default function TeacherDashboard() {
     if (!supabase) return;
     setLoading(true);
     try {
+      // 1. Sembrar Nodos del nuevo DAG
+      const nodeInserts = Object.keys(DAG).map((key) => ({
+        id: key,
+        label: DAG[key].label,
+        unit: DAG[key].unit,
+        unit_order: 3 // general fallback
+      }));
+      const { error: nodeErr } = await supabase.from("nodes").upsert(nodeInserts);
+      if (nodeErr) throw new Error("Error Nodes: " + nodeErr.message);
+
+      // 2. Sembrar Ejercicios
       const inserts = EXERCISES.map((ex: any, i: number) => ({
         id: i + 100, // force clean sequential IDs avoiding SQL seed
         node_id: ex.node,
@@ -99,8 +110,9 @@ export default function TeacherDashboard() {
         prompt: ex.prompt
       }));
       const { error } = await supabase.from("exercises").upsert(inserts);
-      if (error) throw error;
-      alert("Base de datos sembrada con 20+ ejercicios base.");
+      if (error) throw new Error("Error Exercises: " + error.message);
+
+      alert("Base de datos sembrada con los nuevos Nodos y Ejercicios.");
       await fetchData();
     } catch (e: any) {
       alert("Error plantando ejercicios: " + e.message);
