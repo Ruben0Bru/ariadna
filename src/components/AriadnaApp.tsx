@@ -97,12 +97,12 @@ export default function AriadnaApp() {
       const { createClient } = await import("@supabase/supabase-js");
       const sb = createClient(supabaseUrl, supabaseKey);
       
-      const { data } = await sb.from("exercises").select("id, prompt, correct_expr, expected_answer, node_id, prereq_on_fail, fail_reason");
+      const { data } = await sb.from("exercises").select("id, prompt, correct_expr, node_id, prereq_on_fail, fail_reason");
       if (data) {
         const mapped: Exercise[] = data.map(dbEx => ({
           id: dbEx.id,
           prompt: dbEx.prompt,
-          expr: dbEx.expected_answer || dbEx.correct_expr,
+          expr: dbEx.correct_expr,
           node: dbEx.node_id,
           prereqOnFail: dbEx.prereq_on_fail || "",
           failReason: dbEx.fail_reason || "",

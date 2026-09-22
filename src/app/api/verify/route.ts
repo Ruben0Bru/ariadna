@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
   // FETCH NATIVE SUPERBASE EXERCISE
   const { data: ex, error: exError } = await supabase
     .from("exercises")
-    .select("node_id, correct_expr, expected_answer, variable, prereq_on_fail, fail_reason")
+    .select("node_id, correct_expr, variable, prereq_on_fail, fail_reason")
     .eq("id", exerciseId)
     .single();
 
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
   }
 
   const variable = ex.variable || "x";
-  const expectedExprMathjs = toMathjs(ex.expected_answer || ex.correct_expr);
+  const expectedExprMathjs = toMathjs(ex.correct_expr);
   const studentExprMathjs = toMathjs(studentAnswer);
 
   let isCorrect = false;

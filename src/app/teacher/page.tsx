@@ -90,16 +90,13 @@ export default function TeacherDashboard() {
     setLoading(true);
     try {
       const inserts = EXERCISES.map((ex: any, i: number) => ({
-        id: i + 1, // force clean sequential IDs
+        id: i + 100, // force clean sequential IDs avoiding SQL seed
         node_id: ex.node,
         correct_expr: ex.expr,
-        expected_answer: ex.expr,
-        exercise_type: "differentiate",
         variable: "x",
-        prereq_on_fail: ex.prereqOnFail,
+        prereq_on_fail: ex.prereqOnFail || null,
         fail_reason: ex.failReason,
-        prompt: ex.prompt,
-        created_by_teacher_id: teacherSession?.code,
+        prompt: ex.prompt
       }));
       const { error } = await supabase.from("exercises").upsert(inserts);
       if (error) throw error;
@@ -399,7 +396,7 @@ export default function TeacherDashboard() {
                          (Expresión Correcta original: {ex.correct_expr})
                       </div>
                       <div style={{ color: "var(--text-dim)", fontSize: "0.78rem", fontFamily: "'JetBrains Mono', monospace" }}>
-                        Respuesta esperada: {ex.expected_answer} · ID #{ex.id}
+                        Respuesta esperada: {ex.correct_expr} · ID #{ex.id}
                       </div>
                     </div>
                   </label>
