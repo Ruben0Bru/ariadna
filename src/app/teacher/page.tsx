@@ -86,32 +86,11 @@ export default function TeacherDashboard() {
   }
 
   async function handleSeedDatabase() {
-    if (!supabase) return;
     setLoading(true);
     try {
-      // 1. Sembrar Nodos del nuevo DAG
-      const nodeInserts = Object.keys(DAG).map((key) => ({
-        id: key,
-        label: DAG[key].label,
-        unit: DAG[key].unit,
-        unit_order: 3 // general fallback
-      }));
-      const { error: nodeErr } = await supabase.from("nodes").upsert(nodeInserts);
-      if (nodeErr) throw new Error("Error Nodes: " + nodeErr.message);
-
-      // 2. Sembrar Ejercicios
-      const inserts = EXERCISES.map((ex: any, i: number) => ({
-        id: i + 100, // force clean sequential IDs avoiding SQL seed
-        node_id: ex.node,
-        correct_expr: ex.expr,
-        variable: "x",
-        prereq_on_fail: ex.prereqOnFail || null,
-        fail_reason: ex.failReason,
-        prompt: ex.prompt
-      }));
-      const { error } = await supabase.from("exercises").upsert(inserts);
-      if (error) throw new Error("Error Exercises: " + error.message);
-
+      const res = await fetch("/api/seed", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
       alert("Base de datos sembrada con los nuevos Nodos y Ejercicios.");
       await fetchData();
     } catch (e: any) {
@@ -139,49 +118,46 @@ export default function TeacherDashboard() {
   }
 
   async function handleActivateSession() {
-    if (!supabase || selectedExercises.size === 0) return;
+    if (selectedExercises.size === 0) return;
     setSaving(true);
     setSessionStatus("saving");
     try {
-      // Deactivate any existing sessions
-      await supabase.from("class_sessions").update({ active: false }).eq("active", true);
+      const res = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "activate",
+          exerciseIds: [...selectedExercises],
+          teacherCode: teacherSession?.code
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
 
-      // Resolve teacher_id from code (nullable if not found)
-      let teacherId: string | null = null;
-      if (teacherSession?.code) {
-        const { data: tData } = await supabase
-          .from("teachers")
-          .select("id")
-          .eq("code", teacherSession.code)
-          .maybeSingle();
-        teacherId = tData?.id ?? null;
-      }
-
-      // Create new session (teacher_id nullable)
-      const { data, error } = await supabase
-        .from("class_sessions")
-        .insert({ exercise_ids: [...selectedExercises], active: true, teacher_id: teacherId })
-        .select("id")
-        .single();
-
-      if (error) throw error;
-      setActiveSessionId(data.id);
+      setActiveSessionId(data.sessionId);
       setSessionStatus("active");
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
       setSessionStatus("none");
-      alert("Error al activar la sesión. Verifica que la columna teacher_id sea nullable en Supabase.");
+      alert("Error al activar la sesión: " + e.message);
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDeactivateSession() {
-    if (!supabase || !activeSessionId) return;
-    await supabase.from("class_sessions").update({ active: false }).eq("id", activeSessionId);
-    setActiveSessionId(null);
-    setSessionStatus("none");
-    setSelectedExercises(new Set());
+    try {
+      await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "deactivate" })
+      });
+      setActiveSessionId(null);
+      setSessionStatus("none");
+      setSelectedExercises(new Set());
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   function toggleExercise(id: number) {
