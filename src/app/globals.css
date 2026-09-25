@@ -865,3 +865,320 @@ footer {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   WELCOME & NODE-PICKER SCREEN
+══════════════════════════════════════════════════════════════ */
+.welcome-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.welcome-card {
+  max-width: 560px;
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 48px 40px;
+  text-align: center;
+}
+
+.welcome-title {
+  font-family: 'Newsreader', 'Georgia', serif;
+  font-size: 2rem;
+  font-weight: 500;
+  color: var(--text);
+  margin: 16px 0 8px;
+  line-height: 1.25;
+}
+
+.welcome-title em {
+  color: var(--thread);
+  font-style: italic;
+}
+
+.welcome-subtitle {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin: 0 0 28px;
+  letter-spacing: 0.02em;
+}
+
+.welcome-hint {
+  font-size: 0.92rem;
+  color: var(--text-dim);
+  margin: 0 0 24px;
+  line-height: 1.6;
+}
+
+/* Progress bar */
+.welcome-progress-bar-container {
+  margin: 20px 0 24px;
+  text-align: left;
+}
+
+.welcome-progress-label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.welcome-progress-label strong {
+  color: var(--thread);
+}
+
+.welcome-progress-track {
+  height: 8px;
+  background: var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.welcome-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--thread), var(--ok));
+  border-radius: 4px;
+  transition: width 0.6s cubic-bezier(0.1, 0.9, 0.3, 1);
+  min-width: 4px;
+}
+
+/* Node chips in welcome screen */
+.welcome-node-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+.node-chip {
+  font-size: 0.78rem;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.01em;
+}
+
+.node-chip-mastered {
+  background: rgba(91, 169, 127, 0.15);
+  border: 1px solid var(--ok);
+  color: var(--ok);
+}
+
+.node-chip-pending {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+}
+
+/* Welcome buttons */
+.welcome-btn {
+  padding: 14px 32px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  width: 100%;
+}
+
+.welcome-btn-primary {
+  background: var(--thread);
+  color: #111;
+}
+
+.welcome-btn-primary:hover {
+  background: #e8bf79;
+  transform: translateY(-1px);
+}
+
+.welcome-btn-secondary {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+}
+
+.welcome-btn-secondary:hover {
+  border-color: var(--thread-dim);
+  color: var(--text);
+}
+
+/* Node picker grid */
+.node-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 24px 0 0;
+  text-align: left;
+}
+
+.node-picker-card {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
+.node-picker-card:hover {
+  border-color: var(--thread);
+  background: rgba(212,166,87,0.08);
+  transform: translateY(-2px);
+}
+
+.node-picker-unit {
+  font-size: 0.72rem;
+  color: var(--thread);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.node-picker-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.node-picker-prereqs {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DROPDOWN MENU
+══════════════════════════════════════════════════════════════ */
+.menu-toggle-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.menu-toggle-btn:hover {
+  border-color: var(--thread-dim);
+  color: var(--text);
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  z-index: 200;
+  animation: fadeInDown 0.15s ease;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-header {
+  padding: 10px 12px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  margin-bottom: 4px;
+}
+
+.dropdown-divider {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 4px 0;
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dropdown-item:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+}
+
+.dropdown-item-danger {
+  color: var(--warn);
+}
+
+.dropdown-item-danger:hover {
+  background: rgba(217, 122, 92, 0.1);
+  color: var(--warn);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TEXT COLOR FIXES (no more unreadable black text)
+══════════════════════════════════════════════════════════════ */
+:root {
+  --text-main: var(--text); /* use this for main content text */
+  --accent-glow: var(--thread);
+}
+
+/* Ensure all inline code uses light text */
+code {
+  background: rgba(255,255,255,0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85em;
+  color: var(--thread);
+}
+
+/* Skip / surrender button */
+.skip-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.skip-btn:hover {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* Service error box */
+.service-error {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: rgba(217,122,92,0.1);
+  border: 1px solid var(--warn);
+  border-radius: 8px;
+  color: var(--warn);
+  font-size: 0.88rem;
+}

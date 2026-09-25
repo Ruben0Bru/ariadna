@@ -6,6 +6,7 @@ import { saveSession, saveTeacherSession, isTeacherCode } from "@/lib/session";
 
 export default function LoginPage() {
   const [code, setCode] = useState("");
+  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [classActive, setClassActive] = useState(false);
@@ -36,6 +37,7 @@ export default function LoginPage() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = code.trim().toUpperCase();
+    const trimmedName = name.trim();
     if (!trimmed) {
       setError("Por favor ingresa tu código de participante.");
       return;
@@ -93,6 +95,7 @@ export default function LoginPage() {
         studentId: data.studentId,
         groupId: data.groupId,
         code: trimmed,
+        name: trimmedName || trimmed,
         masteredNodes: data.masteredNodes ?? [],
       });
 
@@ -103,6 +106,7 @@ export default function LoginPage() {
       setLoading(false);
     }
   }
+
 
   return (
     <div className="login-container">
@@ -125,11 +129,28 @@ export default function LoginPage() {
             a través del cálculo.
           </h1>
           <p className="sub">
-            Ingresa el código que te asignó tu docente para comenzar la sesión.
+            Ingresa con el código que te asignó tu docente.
           </p>
         </div>
 
         <form onSubmit={handleLogin} className="login-form" noValidate>
+          {!codeIsTeacher && (
+            <>
+              <label className="login-label" htmlFor="nameInput">Tu nombre</label>
+              <input
+                id="nameInput"
+                type="text"
+                className="login-input"
+                placeholder="ej: María García"
+                value={name}
+                onChange={(e) => { setName(e.target.value); setError(null); }}
+                autoComplete="name"
+                disabled={loading}
+                style={{ marginBottom: "14px" }}
+              />
+            </>
+          )}
+
           <label className="login-label" htmlFor="codeInput">
             {codeIsTeacher ? "👩🏽‍🏫 Código de docente detectado" : "Código de acceso"}
           </label>
@@ -182,3 +203,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

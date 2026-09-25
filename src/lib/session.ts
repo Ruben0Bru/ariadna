@@ -6,8 +6,10 @@ export interface StudentSession {
   studentId: string;   // UUID de Supabase
   groupId: number;     // 1 | 2 | 3
   code: string;        // código visible, ej. "G2-014"
+  name?: string;       // nombre del estudiante (opcional)
   masteredNodes: string[]; // RF-18: nodos ya dominados en sesiones previas
 }
+
 
 export interface TeacherSession {
   teacherId: string;   // UUID de Supabase teachers.id

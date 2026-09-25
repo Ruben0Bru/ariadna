@@ -33,7 +33,8 @@ export const DAG_ORDER = [
 ];
 
 // Nodo de entrada por defecto al iniciar sesión
-export const DEFAULT_NODE = "regla_potencia";
+export const DEFAULT_NODE = "leyes_exponentes";
+
 
 // ── Tarjetas de concepto (se muestran antes del primer ejercicio de cada nodo) ─
 export interface NodeConcept {

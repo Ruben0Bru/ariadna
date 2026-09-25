@@ -11,7 +11,6 @@ import ChatPanel from "@/components/ChatPanel";
 
 type FeedbackState = "hidden" | "ok" | "warn";
 
-// Baraja un arreglo (Fisher-Yates)
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -23,40 +22,53 @@ function shuffle<T>(arr: T[]): T[] {
 
 const MASTERY_THRESHOLD = 3;
 
+// ── Group labels ────────────────────────────────────────────────────────────
+const GROUP_LABELS: Record<number, string> = {
+  1: "Grupo Control",
+  2: "Grupo Híbrido",
+  3: "Grupo Autónomo",
+};
+
 export default function AriadnaApp() {
   const router = useRouter();
   const [session, setSession] = useState<StudentSession | null>(null);
 
-  // ── Fase de concepto ────────────────────────────────────────────────────────
+  // ── Welcome / node-selection screen ─────────────────────────────────────────
+  // "welcome"  = first screen (shows progress summary)
+  // "pick"     = node picker (first-time users)
+  // "learning" = actual learning mode
+  type AppPhase = "welcome" | "pick" | "learning";
+  const [phase, setPhase] = useState<AppPhase>("welcome");
+
+  // ── Concept cards ────────────────────────────────────────────────────────────
   const [conceptShown, setConceptShown] = useState<Set<string>>(new Set());
   const [showingConcept, setShowingConcept] = useState(false);
 
-  // ── Estado de nodos ─────────────────────────────────────────────────────────
+  // ── Node state ───────────────────────────────────────────────────────────────
   const [activeNode, setActiveNode] = useState<string>(DEFAULT_NODE);
   const [masteredNodes, setMasteredNodes] = useState<Set<string>>(new Set());
 
-  // ── Estado de revisión (repaso de prerrequisito) ─────────────────────────────
-  // mainNode: el nodo al que debe VOLVER el estudiante al terminar el repaso
+  // ── Review mode ──────────────────────────────────────────────────────────────
   const mainNodeRef = useRef<string>(DEFAULT_NODE);
-  // savedExerciseIndex: para restaurar el ejercicio donde estaba antes del repaso
   const savedExerciseIndexRef = useRef<number>(0);
   const [reviewNode, setReviewNode] = useState<string | null>(null);
   const isReviewMode = activeNode !== mainNodeRef.current;
 
-  // ── Estado de ejercicios ────────────────────────────────────────────────────
+  // ── Exercise state ───────────────────────────────────────────────────────────
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
+  const [exercisesLoaded, setExercisesLoaded] = useState(false);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [current, setCurrent] = useState(0);
 
-  // ── Clase activa del docente ─────────────────────────────────────────────────
+  // ── Class session ────────────────────────────────────────────────────────────
   const [classExerciseIds, setClassExerciseIds] = useState<number[] | null>(null);
   const [classSessionActive, setClassSessionActive] = useState(false);
 
-  // ── Criterio de dominio ─────────────────────────────────────────────────────
+  // ── Mastery ──────────────────────────────────────────────────────────────────
   const [consecutiveCorrect, setConsecutiveCorrect] = useState(0);
   const [justMastered, setJustMastered] = useState(false);
 
-  // ── Interacción ─────────────────────────────────────────────────────────────
+  // ── Interaction ──────────────────────────────────────────────────────────────
   const [inputValue, setInputValue] = useState("");
   const [checking, setChecking] = useState(false);
   const [feedbackState, setFeedbackState] = useState<FeedbackState>("hidden");
@@ -67,13 +79,15 @@ export default function AriadnaApp() {
   const [failedAttempts, setFailedAttempts] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // ── Verificar sesión al montar ──────────────────────────────────────────────
+  // ── Dropdown menu ────────────────────────────────────────────────────────────
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // ── Init: check session, fetch exercises, check class session ─────────────────
   useEffect(() => {
     const s = getSession();
     if (!s) { window.location.href = "/login"; return; }
     setSession(s);
 
-    // Restaurar progreso y avanzar automáticamente al nodo no dominado
     if (s.masteredNodes?.length) {
       const mNodes = new Set(s.masteredNodes);
       setMasteredNodes(mNodes);
@@ -82,10 +96,7 @@ export default function AriadnaApp() {
       mainNodeRef.current = firstAvailable;
     }
 
-    // Cargar Banco de Ejercicios desde Supabase
     fetchAllExercises();
-
-    // Verificar si hay clase activa del docente
     checkClassSession();
   }, [router]);
 
@@ -93,10 +104,9 @@ export default function AriadnaApp() {
     try {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!supabaseUrl || !supabaseKey) return;
+      if (!supabaseUrl || !supabaseKey) { setExercisesLoaded(true); return; }
       const { createClient } = await import("@supabase/supabase-js");
       const sb = createClient(supabaseUrl, supabaseKey);
-      
       const { data } = await sb.from("exercises").select("id, prompt, correct_expr, node_id, prereq_on_fail, fail_reason");
       if (data) {
         const mapped: Exercise[] = data.map(dbEx => ({
@@ -111,6 +121,8 @@ export default function AriadnaApp() {
       }
     } catch(e) {
       console.error("Error cargando ejercicios BD", e);
+    } finally {
+      setExercisesLoaded(true);
     }
   }
 
@@ -119,27 +131,27 @@ export default function AriadnaApp() {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
       if (!supabaseUrl || !supabaseKey) return;
-
       const { createClient } = await import("@supabase/supabase-js");
       const sb = createClient(supabaseUrl, supabaseKey);
+      // Use maybeSingle() so no exception is thrown when there's no active session
       const { data } = await sb
         .from("class_sessions")
         .select("exercise_ids")
         .eq("active", true)
         .order("created_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (data?.exercise_ids && Array.isArray(data.exercise_ids)) {
+      if (data?.exercise_ids && Array.isArray(data.exercise_ids) && data.exercise_ids.length > 0) {
         setClassExerciseIds(data.exercise_ids);
         setClassSessionActive(true);
       }
     } catch {
-      // Sin clase activa — flujo normal
+      // No active class session — normal flow
     }
   }
 
-  // ── Cambio de nodo: mostrar concepto si es nuevo ────────────────────────────
+  // ── Concept card trigger on node change ─────────────────────────────────────
   useEffect(() => {
     if (!conceptShown.has(activeNode) && CONCEPTS[activeNode]) {
       setShowingConcept(true);
@@ -148,19 +160,24 @@ export default function AriadnaApp() {
     }
   }, [activeNode, conceptShown]);
 
-  // ── RF-15: Grupo 2 — máximo 5 ejercicios por sesión ─────────────────────────
+  // ── RF-15: Group 2 — max 5 exercises per session ────────────────────────────
   const SESSION_LIMIT = session?.groupId === 2 ? 5 : Infinity;
 
-  // ── Cambio de nodo: cargar ejercicios ───────────────────────────────────────
+  // ── Load exercises when node / class session changes ─────────────────────────
   useEffect(() => {
     let pool: Exercise[];
 
-    if (classSessionActive && classExerciseIds && !isReviewMode) {
-      // Clase activa: filtrar por IDs asignados por el docente para el nodo actual
-      pool = allExercises.filter(e => e.node === activeNode && classExerciseIds.includes(e.id));
-      if (pool.length === 0) {
-        // Si no hay ejercicios del docente para este nodo, usar banco normal
-        pool = allExercises.filter(e => e.node === activeNode);
+    if (classSessionActive && classExerciseIds) {
+      // Class session active: show only the exercises the teacher assigned, regardless of node
+      pool = allExercises.filter(e => classExerciseIds.includes(e.id));
+      // Drive the active node from the first exercise in the session
+      if (pool.length > 0 && pool[0].node && !isReviewMode) {
+        const sessionNode = pool[0].node;
+        if (sessionNode !== activeNode) {
+          setActiveNode(sessionNode);
+          mainNodeRef.current = sessionNode;
+          return; // let the effect re-run after the node is updated
+        }
       }
     } else {
       pool = allExercises.filter(e => e.node === activeNode);
@@ -171,7 +188,6 @@ export default function AriadnaApp() {
     setConsecutiveCorrect(0);
     setJustMastered(false);
 
-    // Si volvemos al mainNode y había un ejercicio guardado, restaurarlo
     if (!isReviewMode && savedExerciseIndexRef.current > 0) {
       setCurrent(Math.min(savedExerciseIndexRef.current, Math.max(0, limited.length - 1)));
       savedExerciseIndexRef.current = 0;
@@ -182,7 +198,7 @@ export default function AriadnaApp() {
 
   const ex: Exercise | undefined = exercises[current];
 
-  // Reset al cambiar de ejercicio
+  // Reset on exercise change
   useEffect(() => {
     setInputValue("");
     setFeedbackState("hidden");
@@ -191,12 +207,11 @@ export default function AriadnaApp() {
     inputRef.current?.focus();
   }, [current, activeNode]);
 
-  // ── Verificación y feedback ─────────────────────────────────────────────────
+  // ── Verify & feedback ────────────────────────────────────────────────────────
   const handleCheck = useCallback(async () => {
     if (!inputValue.trim() || checking || !ex || !session) return;
     setChecking(true);
     setServiceError(null);
-    // Mostrar resultado inmediato antes de que Gemini responda
     setFeedbackText("");
     setFeedbackLoading(false);
 
@@ -221,12 +236,10 @@ export default function AriadnaApp() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        const msg = body?.error ?? `Error del servidor (${res.status}). Intenta de nuevo.`;
-        setServiceError(msg);
+        setServiceError(body?.error ?? `Error del servidor (${res.status}).`);
         setChecking(false);
         return;
       }
-
       verifyData = await res.json();
     } catch {
       setServiceError("Error de red. Verifica tu conexión e intenta de nuevo.");
@@ -236,22 +249,19 @@ export default function AriadnaApp() {
 
     const { correct, prereqSuggested, failReason, errorType, attemptId } = verifyData;
 
-    // Resultado matemático INMEDIATO (sin esperar Gemini)
     setFeedbackState(correct ? "ok" : "warn");
     setFeedbackTag(
       correct
         ? `✓ CORRECTO — ${consecutiveCorrect + 1}/${MASTERY_THRESHOLD} hacia dominio`
         : "✗ REVISIÓN NECESARIA — Verificado por motor matemático"
     );
-    setFeedbackLoading(true); // skeleton mientras llega Gemini
-    setChecking(false); // habilitar la UI mientras Gemini trabaja en paralelo
+    setFeedbackLoading(true);
+    setChecking(false);
 
-    // ── Actualizar criterio de dominio ──────────────────────────────────────
     if (correct) {
       const newConsec = consecutiveCorrect + 1;
       setConsecutiveCorrect(newConsec);
       setReviewNode(null);
-
       if (newConsec >= MASTERY_THRESHOLD && !masteredNodes.has(activeNode)) {
         const newMastered = new Set([...masteredNodes, activeNode]);
         setMasteredNodes(newMastered);
@@ -266,7 +276,6 @@ export default function AriadnaApp() {
 
     const targetNode = prereqSuggested ? DAG[prereqSuggested] : null;
 
-    // Llamada a Gemini en paralelo (no bloquea la UI)
     fetch("/api/feedback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -301,22 +310,17 @@ export default function AriadnaApp() {
     if (e.key === "Enter") handleCheck();
   }
 
-  // ── Navegar al siguiente ejercicio o terminar repaso ────────────────────────
   function handleNext() {
     if (current < exercises.length - 1) {
       setCurrent(c => c + 1);
     } else if (isReviewMode) {
-      // Terminar repaso: volver al nodo principal y restaurar ejercicio
       setActiveNode(mainNodeRef.current);
       setReviewNode(null);
     }
-    // Si ya está en el mainNode y terminó todos los ejercicios → no hacer nada
-    // (el guard de RF-15 o justMastered lo manejará)
   }
 
   function handleGoToReview() {
     if (!reviewNode) return;
-    // Guardar el estado actual antes de entrar al repaso
     savedExerciseIndexRef.current = current;
     mainNodeRef.current = activeNode;
     setActiveNode(reviewNode);
@@ -330,17 +334,10 @@ export default function AriadnaApp() {
 
   function handleNodeClick(nodeId: string) {
     if (nodeId === activeNode) return;
-    // Solo se puede navegar a nodos con prerrequisitos cumplidos
     const prereqs = DAG[nodeId]?.prereqs ?? [];
     const accessible = prereqs.every(p => masteredNodes.has(p)) || masteredNodes.has(nodeId);
     if (!accessible) return;
-
-    if (isReviewMode) {
-      // Si el estudiante navega desde modo repaso, guardar el contexto
-      mainNodeRef.current = activeNode === mainNodeRef.current ? activeNode : mainNodeRef.current;
-    } else {
-      mainNodeRef.current = nodeId; // cambia el flujo principal
-    }
+    mainNodeRef.current = nodeId;
     setActiveNode(nodeId);
     setReviewNode(null);
   }
@@ -360,17 +357,15 @@ export default function AriadnaApp() {
 
   function handleContinueAfterMastery() {
     setJustMastered(false);
-    // Siempre avanzar al siguiente nodo no dominado, nunca volver al mismo
     const newMastered = new Set([...masteredNodes, activeNode]);
     const next = DAG_ORDER.find(n => !newMastered.has(n));
     if (next) {
       mainNodeRef.current = next;
       setActiveNode(next);
     }
-    // Si todos están dominados, el estudiante habrá completado el grafo
   }
 
-  // ── Guards de renderizado ────────────────────────────────────────────────────
+  // ── Guard: loading session ────────────────────────────────────────────────────
   if (!session) {
     return (
       <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--text-dim)" }}>
@@ -379,7 +374,121 @@ export default function AriadnaApp() {
     );
   }
 
-  // Pantalla de celebración de dominio
+  // ── Phase: Welcome screen ─────────────────────────────────────────────────────
+  if (phase === "welcome") {
+    const isFirstTime = session.masteredNodes?.length === 0 || !session.masteredNodes;
+    return (
+      <div className="welcome-screen">
+        <div className="welcome-card">
+          <div className="eyebrow">ARIADNA — TUTOR DE CÁLCULO I</div>
+          <h1 className="welcome-title">
+            Hola, <em>{session.name ?? session.code}</em> 👋
+          </h1>
+          <p className="welcome-subtitle">
+            {GROUP_LABELS[session.groupId] ?? `Grupo ${session.groupId}`}
+          </p>
+
+          {/* Progress summary */}
+          <div className="welcome-progress-bar-container">
+            <div className="welcome-progress-label">
+              Progreso: <strong>{masteredNodes.size}</strong> / {DAG_ORDER.length} nodos dominados
+            </div>
+            <div className="welcome-progress-track">
+              <div
+                className="welcome-progress-fill"
+                style={{ width: `${(masteredNodes.size / DAG_ORDER.length) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Node status chips */}
+          <div className="welcome-node-chips">
+            {DAG_ORDER.map(n => (
+              <span
+                key={n}
+                className={`node-chip ${masteredNodes.has(n) ? "node-chip-mastered" : "node-chip-pending"}`}
+              >
+                {masteredNodes.has(n) ? "✓ " : ""}{DAG[n]?.label}
+              </span>
+            ))}
+          </div>
+
+          {isFirstTime ? (
+            <>
+              <p className="welcome-hint">
+                Es tu primera sesión. Elige desde qué tema quieres comenzar.
+              </p>
+              <button
+                className="welcome-btn welcome-btn-secondary"
+                onClick={() => setPhase("pick")}
+              >
+                Elegir tema de inicio →
+              </button>
+            </>
+          ) : (
+            <button
+              className="welcome-btn welcome-btn-primary"
+              onClick={() => setPhase("learning")}
+            >
+              Continuar con <em>{DAG[activeNode]?.label}</em> →
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Phase: Node picker (first-time users) ─────────────────────────────────────
+  if (phase === "pick") {
+    return (
+      <div className="welcome-screen">
+        <div className="welcome-card" style={{ maxWidth: 680 }}>
+          <div className="eyebrow">ARIADNA — ELIGE TU PUNTO DE PARTIDA</div>
+          <h2 className="welcome-title" style={{ fontSize: "1.6rem" }}>
+            ¿Desde dónde quieres empezar?
+          </h2>
+          <p className="welcome-hint">
+            Ariadna evaluará tu nivel mientras practicas. Puedes empezar desde un tema avanzado o desde los fundamentos.
+          </p>
+          <div className="node-picker-grid">
+            {DAG_ORDER.map(n => {
+              const prereqs = DAG[n]?.prereqs ?? [];
+              const label = DAG[n]?.label;
+              const unit = DAG[n]?.unit;
+              return (
+                <button
+                  key={n}
+                  className="node-picker-card"
+                  onClick={() => {
+                    mainNodeRef.current = n;
+                    setActiveNode(n);
+                    setPhase("learning");
+                  }}
+                >
+                  <span className="node-picker-unit">{unit}</span>
+                  <span className="node-picker-label">{label}</span>
+                  {prereqs.length > 0 && (
+                    <span className="node-picker-prereqs">
+                      Requiere: {prereqs.map(p => DAG[p]?.label).join(", ")}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            className="welcome-btn welcome-btn-secondary"
+            style={{ marginTop: 20 }}
+            onClick={() => setPhase("welcome")}
+          >
+            ← Volver
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Guard: mastery screen ─────────────────────────────────────────────────────
   if (justMastered) {
     const nodeName = DAG[activeNode]?.label ?? activeNode;
     const newMastered = new Set([...masteredNodes, activeNode]);
@@ -404,22 +513,22 @@ export default function AriadnaApp() {
     );
   }
 
-  // RF-15: Pantalla de sesión completada (Grupo 2)
+  // ── Guard: RF-15 Grupo 2 session completed ────────────────────────────────────
   if (session.groupId === 2 && current >= exercises.length && exercises.length > 0 && !isReviewMode && !justMastered) {
     return (
       <div style={{ textAlign: "center", padding: "80px 20px", color: "var(--text-main)" }}>
         <h2 style={{ fontSize: "1.8rem", marginBottom: "12px" }}>Sesión completada 🎓</h2>
         <p style={{ color: "var(--text-dim)", maxWidth: "420px", margin: "0 auto 24px" }}>
-          Has terminado los ejercicios de esta sesión de taller. Tu progreso queda guardado.
+          Has terminado los ejercicios de esta sesión. Tu progreso queda guardado.
         </p>
-        <button onClick={handleLogout} style={{ padding: "10px 24px", borderRadius: "8px", background: "var(--accent-glow)", color: "#111", border: "none", cursor: "pointer", fontWeight: 600 }}>
+        <button onClick={handleLogout} className="welcome-btn welcome-btn-primary">
           Cerrar sesión
         </button>
       </div>
     );
   }
 
-  // Tarjeta de concepto (antes del primer ejercicio del nodo)
+  // ── Guard: concept card ───────────────────────────────────────────────────────
   if (showingConcept && CONCEPTS[activeNode]) {
     return (
       <div style={{ maxWidth: "720px", margin: "0 auto", padding: "40px 20px" }}>
@@ -435,44 +544,94 @@ export default function AriadnaApp() {
     );
   }
 
+  // ── Guard: exercises not loaded yet ──────────────────────────────────────────
   if (!ex) {
+    if (!exercisesLoaded) {
+      return (
+        <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--text-dim)" }}>
+          Cargando ejercicios<span className="loading-dots" />
+        </div>
+      );
+    }
+    // Exercises loaded but empty
     return (
       <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--text-dim)" }}>
-        Cargando<span className="loading-dots" />
+        <div style={{ fontSize: "2.5rem", marginBottom: "16px" }}>📭</div>
+        <h2 style={{ color: "var(--text-main)", marginBottom: "8px" }}>Sin ejercicios disponibles</h2>
+        <p style={{ marginBottom: "24px", maxWidth: "400px", margin: "0 auto 24px" }}>
+          La base de datos no tiene ejercicios para el tema <strong>{DAG[activeNode]?.label}</strong> todavía.
+          Pídele al docente que siembre el banco de ejercicios.
+        </p>
+        <button
+          onClick={() => setPhase("pick")}
+          style={{ padding: "10px 22px", borderRadius: "8px", background: "var(--accent-glow)", color: "#111", border: "none", cursor: "pointer", fontWeight: 600 }}
+        >
+          Cambiar de tema
+        </button>
       </div>
     );
   }
 
+  // ── Main learning view ────────────────────────────────────────────────────────
   return (
     <>
+      {/* ── Header ── */}
       <header>
         <div className="header-top">
           <div className="eyebrow">
-            ARIADNA — TUTOR INTELIGENTE / UNIDAD 3
+            ARIADNA · {DAG[activeNode]?.unit ?? "Cálculo I"}
             {classSessionActive && (
-              <span style={{ marginLeft: 12, background: "var(--accent-glow)", color: "#111", borderRadius: 6, padding: "2px 8px", fontSize: "0.75rem", fontWeight: 700 }}>
+              <span style={{ marginLeft: 10, background: "var(--accent-glow)", color: "#111", borderRadius: 6, padding: "2px 8px", fontSize: "0.72rem", fontWeight: 700 }}>
                 🏫 Clase activa
               </span>
             )}
           </div>
-          <button className="logout-btn" onClick={handleLogout} title="Cerrar sesión">
-            {session.code} ↩
-          </button>
+
+          {/* ── Dropdown menu ── */}
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setMenuOpen(o => !o)}
+              className="menu-toggle-btn"
+              aria-label="Menú de opciones"
+            >
+              {session.code} ▾
+            </button>
+            {menuOpen && (
+              <div className="dropdown-menu" onMouseLeave={() => setMenuOpen(false)}>
+                <div className="dropdown-header">
+                  <div style={{ fontWeight: 700, color: "var(--text-main)" }}>{session.name ?? session.code}</div>
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-dim)" }}>{GROUP_LABELS[session.groupId]}</div>
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-dim)", marginTop: 2 }}>
+                    Nodos dominados: {masteredNodes.size} / {DAG_ORDER.length}
+                  </div>
+                </div>
+                <hr className="dropdown-divider" />
+                <button className="dropdown-item" onClick={() => { setMenuOpen(false); setPhase("welcome"); }}>
+                  📊 Ver mi progreso
+                </button>
+                <button className="dropdown-item" onClick={() => { setMenuOpen(false); setPhase("pick"); }}>
+                  🗺️ Cambiar de tema
+                </button>
+                <hr className="dropdown-divider" />
+                <button className="dropdown-item dropdown-item-danger" onClick={handleLogout}>
+                  ↩ Cerrar sesión
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+
         <h1>
           El hilo que <em>te guía</em>
           <br />
           paso a paso.
         </h1>
         <p className="sub">
-          Resuelve cada ejercicio. Domina un nodo respondiendo {MASTERY_THRESHOLD} seguidas bien.
-          Usa{" "}
-          <code className="inline-code">^</code> para potencias,{" "}
-          <code className="inline-code">*</code> para multiplicar,{" "}
-          <code className="inline-code">sqrt(x)</code> para raíces.
+          Domina un tema respondiendo <strong>{MASTERY_THRESHOLD}</strong> ejercicios seguidos correctamente.
         </p>
       </header>
 
+      {/* ── Thread map ── */}
       <ThreadMap
         masteredNodes={masteredNodes}
         reviewNode={reviewNode}
@@ -480,36 +639,24 @@ export default function AriadnaApp() {
         onNodeClick={handleNodeClick}
       />
 
+      {/* ── Review mode banner ── */}
       {isReviewMode && (
-        <div style={{
-          background: "rgba(255, 170, 0, 0.1)",
-          border: "1px solid rgba(255, 170, 0, 0.4)",
-          borderRadius: "8px",
-          padding: "10px 16px",
-          marginBottom: "12px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          fontSize: "0.9rem",
-          color: "var(--text-main)"
-        }}>
-          <span>🔄 Modo Repaso: <strong>{DAG[activeNode]?.label}</strong></span>
-          <button
-            onClick={handleReturnEarly}
-            style={{ background: "transparent", border: "1px solid var(--accent-glow)", color: "var(--accent-glow)", padding: "4px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "0.85rem", fontWeight: 600 }}
-          >
+        <div className="review-banner">
+          <span>🔄 Repasando: <strong>{DAG[activeNode]?.label}</strong></span>
+          <button onClick={handleReturnEarly} className="review-return-btn">
             ↩ Volver a {DAG[mainNodeRef.current]?.label ?? "unidad"}
           </button>
         </div>
       )}
 
+      {/* ── Exercise card ── */}
       <div className="card">
         <div className="card-meta">
-          <span className="card-label">Ejercicio {current + 1} de {exercises.length}</span>
+          <span className="card-label">Ejercicio {current + 1} / {exercises.length}</span>
           <span className="card-node-badge">{DAG[activeNode]?.label ?? activeNode}</span>
           {consecutiveCorrect > 0 && !justMastered && (
             <span className="mastery-progress-badge">
-              🔥 {consecutiveCorrect}/{MASTERY_THRESHOLD} consecutivas
+              🔥 {consecutiveCorrect}/{MASTERY_THRESHOLD}
             </span>
           )}
         </div>
@@ -518,9 +665,8 @@ export default function AriadnaApp() {
           <span className="fn">{ex?.prompt}</span>
         </div>
 
-        {/* Pista de notación */}
-        <div style={{ fontSize: "0.8rem", color: "var(--text-dim)", marginBottom: "8px", marginTop: "-4px" }}>
-          💡 Recuerda usar <code style={{ background: "rgba(255,255,255,0.07)", padding: "1px 4px", borderRadius: "4px" }}>*</code> para multiplicar y <code style={{ background: "rgba(255,255,255,0.07)", padding: "1px 4px", borderRadius: "4px" }}>^</code> para exponentes (ej: <code style={{ background: "rgba(255,255,255,0.07)", padding: "1px 4px", borderRadius: "4px" }}>3*x^2</code>).
+        <div className="notation-hint">
+          💡 Usa <code>*</code> para multiplicar y <code>^</code> para exponentes — ej: <code>3*x^2 - 6*x</code>
         </div>
 
         <div className="input-row">
@@ -528,7 +674,7 @@ export default function AriadnaApp() {
             ref={inputRef}
             type="text"
             id="answerInput"
-            placeholder="ej: 6*x - 5   (usa ^ para potencias, * para multiplicar)"
+            placeholder="Escribe tu respuesta aquí…"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -540,7 +686,7 @@ export default function AriadnaApp() {
                 ? "Siguiente ➔"
                 : isReviewMode
                   ? "✓ Terminar Repaso ➔"
-                  : "Finalizar →"}
+                  : "Continuar →"}
             </button>
           ) : (
             <button id="checkBtn" onClick={handleCheck} disabled={checking || !inputValue.trim()}>
@@ -550,12 +696,9 @@ export default function AriadnaApp() {
         </div>
 
         {failedAttempts >= 3 && !checking && feedbackState !== "ok" && (
-          <div style={{ marginTop: "10px", textAlign: "right", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-            <button
-              onClick={handleSkip}
-              style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-dim)", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "0.9rem" }}
-            >
-              Me rindo, mostrar solución ⏭
+          <div style={{ marginTop: "10px", textAlign: "right" }}>
+            <button onClick={handleSkip} className="skip-btn">
+              Me rindo — mostrar solución ⏭
             </button>
           </div>
         )}
@@ -572,26 +715,16 @@ export default function AriadnaApp() {
         />
 
         {reviewNode && !checking && feedbackState === "warn" && (
-          <div style={{ marginTop: "15px", textAlign: "center" }}>
-            <p style={{ color: "var(--text-dim)", fontSize: "0.85rem", marginBottom: "8px" }}>
-              Parece que este tema requiere repasar un prerrequisito:
-            </p>
-            <button
-              onClick={handleGoToReview}
-              style={{ background: "var(--accent-glow)", color: "#111", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: 600 }}
-            >
+          <div className="prereq-suggestion">
+            <p>Parece que este tema requiere repasar un prerrequisito:</p>
+            <button onClick={handleGoToReview} className="prereq-btn">
               Repasar {DAG[reviewNode]?.label ?? "prerrequisito"} ↗
             </button>
           </div>
         )}
-
-        <div className="architecture">
-          <span>Juez matemático: <b>mathjs (verificación numérica)</b></span>
-          <span>Mediador pedagógico: <b>Gemini — 3 niveles de pista</b></span>
-          <span>Dominio: <b>{MASTERY_THRESHOLD} correctas consecutivas</b></span>
-        </div>
       </div>
 
+      {/* ── Chat panel (dudas) ── */}
       <ChatPanel
         currentNode={activeNode}
         currentNodeLabel={DAG[activeNode]?.label ?? activeNode}
@@ -601,8 +734,7 @@ export default function AriadnaApp() {
       />
 
       <footer>
-        Ariadna — Universidad de Córdoba, Ingeniería de Sistemas. La verificación es
-        matemática real (mathjs). El LLM sólo redacta el texto pedagógico, nunca evalúa matemáticamente.
+        Ariadna — Ingeniería de Sistemas, Universidad de Córdoba · Verificación matemática real (mathjs)
       </footer>
     </>
   );

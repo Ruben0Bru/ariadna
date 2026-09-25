@@ -129,7 +129,7 @@ export default function TeacherDashboard() {
       .eq("active", true)
       .order("created_at", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (data) {
       setActiveSessionId(data.id);
@@ -145,11 +145,22 @@ export default function TeacherDashboard() {
     try {
       // Deactivate any existing sessions
       await supabase.from("class_sessions").update({ active: false }).eq("active", true);
-      
-      // Create new session
+
+      // Resolve teacher_id from code (nullable if not found)
+      let teacherId: string | null = null;
+      if (teacherSession?.code) {
+        const { data: tData } = await supabase
+          .from("teachers")
+          .select("id")
+          .eq("code", teacherSession.code)
+          .maybeSingle();
+        teacherId = tData?.id ?? null;
+      }
+
+      // Create new session (teacher_id nullable)
       const { data, error } = await supabase
         .from("class_sessions")
-        .insert({ exercise_ids: [...selectedExercises], active: true })
+        .insert({ exercise_ids: [...selectedExercises], active: true, teacher_id: teacherId })
         .select("id")
         .single();
 
@@ -159,7 +170,7 @@ export default function TeacherDashboard() {
     } catch (e) {
       console.error(e);
       setSessionStatus("none");
-      alert("Error al activar la sesión de clase.");
+      alert("Error al activar la sesión. Verifica que la columna teacher_id sea nullable en Supabase.");
     } finally {
       setSaving(false);
     }
@@ -403,12 +414,12 @@ export default function TeacherDashboard() {
                       onChange={() => toggleExercise(ex.id)}
                       style={{ marginTop: "3px", accentColor: "var(--thread)", width: "16px", height: "16px", cursor: "pointer" }}
                     />
-                    <div>
-                      <div style={{ color: "var(--thread)", fontSize: "0.95rem", marginBottom: "2px" }}>
-                         (Expresión Correcta original: {ex.correct_expr})
+                  <div>
+                      <div style={{ color: "var(--text-main)", fontSize: "0.95rem", marginBottom: "4px" }}>
+                         {ex.prompt}
                       </div>
                       <div style={{ color: "var(--text-dim)", fontSize: "0.78rem", fontFamily: "'JetBrains Mono', monospace" }}>
-                        Respuesta esperada: {ex.correct_expr} · ID #{ex.id}
+                        Respuesta: {ex.correct_expr} · ID #{ex.id}
                       </div>
                     </div>
                   </label>

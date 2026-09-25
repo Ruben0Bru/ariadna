@@ -124,9 +124,23 @@ export async function POST(req: NextRequest) {
   let attemptId: number | null = null;
 
   if (isCorrect) {
-     // Optional Mastery Logging
-     supabase.rpc("append_mastered_node", { p_student_id: studentId, p_node_id: ex.node_id }).then();
+    // Update mastered_nodes directly (no RPC dependency)
+    supabase.from("students")
+      .select("mastered_nodes")
+      .eq("id", studentId)
+      .single()
+      .then(({ data: sData }) => {
+        if (!sData) return;
+        const current: string[] = sData.mastered_nodes ?? [];
+        if (!current.includes(ex.node_id)) {
+          supabase.from("students")
+            .update({ mastered_nodes: [...current, ex.node_id] })
+            .eq("id", studentId)
+            .then();
+        }
+      });
   }
+
 
   const { data: attemptData } = await supabase
     .from("attempts")
