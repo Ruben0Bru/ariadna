@@ -46,26 +46,19 @@ export default function TeacherDashboard() {
   }, []);
 
   async function fetchData() {
-    if (!supabase) return;
     setLoading(true);
     try {
-      const { data: students } = await supabase
-        .from("students")
-        .select("id, code, group_id, mastered_nodes");
-      const { data: attempts } = await supabase
-        .from("attempts")
-        .select("student_id");
+      const res = await fetch("/api/teacher/data");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
 
-      const counts: Record<string, number> = {};
-      attempts?.forEach(a => { counts[a.student_id] = (counts[a.student_id] || 0) + 1; });
-
-      const combined: StudentStat[] = (students || []).map(s => ({
+      const combined: StudentStat[] = (data.students || []).map((s: any) => ({
         student_id: s.id,
         code: s.code,
         group_id: s.group_id,
         mastered_nodes: s.mastered_nodes || [],
         mastered_count: (s.mastered_nodes || []).length,
-        attempts_count: counts[s.id] || 0,
+        attempts_count: (data.attempts || []).filter((a: any) => a.student_id === s.id).length,
       }));
 
       combined.sort((a, b) => {
@@ -74,10 +67,7 @@ export default function TeacherDashboard() {
       });
 
       setStats(combined);
-
-      // Fetch Exercises
-      const { data: exData } = await supabase.from("exercises").select("*").order("id", { ascending: true });
-      if (exData) setDbExercises(exData);
+      setDbExercises(data.exercises || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -85,20 +75,45 @@ export default function TeacherDashboard() {
     }
   }
 
-  async function handleSeedDatabase() {
-    setLoading(true);
+  // Custom Exercise Form State
+  const [newExNode, setNewExNode] = useState<string>(DAG_ORDER[0]);
+  const [newExPrompt, setNewExPrompt] = useState("");
+  const [newExExpr, setNewExExpr] = useState("");
+  const [creatingEx, setCreatingEx] = useState(false);
+
+  async function handleCreateExercise(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newExPrompt.trim() || !newExExpr.trim()) {
+      alert("Por favor ingresa todos los campos.");
+      return;
+    }
+    setCreatingEx(true);
     try {
-      const res = await fetch("/api/seed", { method: "POST" });
+      const res = await fetch("/api/exercises", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          node_id: newExNode,
+          prompt: newExPrompt,
+          correct_expr: newExExpr,
+        })
+      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error desconocido");
-      alert("Base de datos sembrada con los nuevos Nodos y Ejercicios.");
-      await fetchData();
-    } catch (e: any) {
-      alert("Error plantando ejercicios: " + e.message);
+      if (!res.ok) throw new Error(data.error);
+
+      setNewExPrompt("");
+      setNewExExpr("");
+      await fetchData(); // refresca la tabla
+      alert("Ejercicio creado exitosamente.");
+    } catch (err: any) {
+      alert("Error creando ejercicio: " + err.message);
     } finally {
-      setLoading(false);
+      setCreatingEx(false);
     }
   }
+
+
+
 
   async function checkActiveSession() {
     if (!supabase) return;
@@ -452,35 +467,74 @@ export default function TeacherDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {dbExercises.length === 0 && (
-                  <tr>
-                    <td colSpan={4} style={{ padding: "24px", textAlign: "center", color: "var(--text-dim)" }}>
-                      Base de datos VASCÍA. Presiona el botón de abajo.
-                    </td>
-                  </tr>
-                )}
-                {dbExercises.map(ex => (
+                {dbExercises.length === 0 ? (
+                <tr>
+                  <td colSpan={4} style={{ padding: "24px", textAlign: "center", color: "var(--text-dim)" }}>
+                    Base de datos VACÍA. No hay ejercicios configurados.
+                  </td>
+                </tr>
+              ) : (
+                dbExercises.map(ex => (
                   <tr key={ex.id} style={{ borderBottom: "1px solid var(--line)" }}>
                     <td style={{ padding: "14px 16px", color: "var(--text-dim)" }}>#{ex.id}</td>
                     <td style={{ padding: "14px 16px", color: "var(--thread)" }}>{ex.node_id}</td>
-                    <td style={{ padding: "14px 16px", fontFamily: "'JetBrains Mono', monospace", fontSize: "0.85rem" }}>{ex.correct_expr}</td>
+                    <td style={{ padding: "14px 16px", color: "var(--text)", fontSize: "0.9rem" }}>
+                      {ex.prompt}
+                      <br/>
+                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "0.8rem", color: "var(--text-dim)" }}>{ex.correct_expr}</span>
+                    </td>
                     <td style={{ padding: "14px 16px", color: "var(--text-dim)", fontSize: "0.8rem" }}>{ex.exercise_type}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
-          <button
-            onClick={handleSeedDatabase}
-            disabled={loading}
-            style={{
-              padding: "10px 20px", background: "rgba(255,50,50,0.15)", border: "1px solid var(--warn)", color: "var(--warn)", 
-              borderRadius: "8px", cursor: loading ? "wait" : "pointer"
-            }}
-          >
-            {loading ? "Sembrando..." : "⚠️ Sembrar Base de Datos (Emergency Seed)"}
-          </button>
+        <div style={{ marginTop: "32px", padding: "24px", background: "rgba(0,0,0,0.1)", borderRadius: "12px", border: "1px solid var(--line)" }}>
+          <h3 style={{ margin: "0 0 16px", color: "var(--text)" }}>Crear Ejercicio Personalizado</h3>
+          <form onSubmit={handleCreateExercise} style={{ display: "flex", flexDirection: "column", gap: "16px", maxWidth: "600px" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.9rem", color: "var(--text-dim)" }}>
+              Tema (Nodo)
+              <select 
+                value={newExNode} 
+                onChange={e => setNewExNode(e.target.value)}
+                style={{ padding: "10px", borderRadius: "8px", background: "var(--panel)", border: "1px solid var(--line)", color: "var(--text)" }}
+              >
+                {DAG_ORDER.map(n => (
+                  <option key={n} value={n}>{DAG[n].label}</option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.9rem", color: "var(--text-dim)" }}>
+              Enunciado (ej. "Deriva f(x) = x^2")
+              <input 
+                type="text"
+                value={newExPrompt} 
+                onChange={e => setNewExPrompt(e.target.value)}
+                placeholder="Escribe el enunciado para el estudiante..."
+                style={{ padding: "10px", borderRadius: "8px", background: "var(--panel)", border: "1px solid var(--line)", color: "var(--text)" }}
+              />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.9rem", color: "var(--text-dim)" }}>
+              Respuesta Matemática Correcta (ej. "2*x")
+              <input 
+                type="text"
+                value={newExExpr} 
+                onChange={e => setNewExExpr(e.target.value)}
+                placeholder="Expresión que valida el nodo..."
+                style={{ fontFamily: "'JetBrains Mono', monospace", padding: "10px", borderRadius: "8px", background: "var(--panel)", border: "1px solid var(--line)", color: "var(--text)" }}
+              />
+            </label>
+            <button 
+              type="submit" 
+              disabled={creatingEx}
+              style={{ padding: "10px 16px", borderRadius: "8px", background: "var(--thread)", color: "#111", fontWeight: "bold", border: "none", cursor: "pointer", width: "fit-content" }}
+            >
+              {creatingEx ? "Guardando..." : "Guardar Ejercicio"}
+            </button>
+          </form>
+        </div>
         </div>
       )}
     </div>

@@ -82,6 +82,10 @@ export default function AriadnaApp() {
   // ── Dropdown menu ────────────────────────────────────────────────────────────
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // ── Scratchpad (Bloc de notas) ───────────────────────────────────────────────
+  const [scratchpadOpen, setScratchpadOpen] = useState(false);
+  const [scratchpadText, setScratchpadText] = useState("");
+
   // ── Init: check session, fetch exercises, check class session ─────────────────
   useEffect(() => {
     const s = getSession();
@@ -102,14 +106,10 @@ export default function AriadnaApp() {
 
   async function fetchAllExercises() {
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!supabaseUrl || !supabaseKey) { setExercisesLoaded(true); return; }
-      const { createClient } = await import("@supabase/supabase-js");
-      const sb = createClient(supabaseUrl, supabaseKey);
-      const { data } = await sb.from("exercises").select("id, prompt, correct_expr, node_id, prereq_on_fail, fail_reason");
-      if (data) {
-        const mapped: Exercise[] = data.map(dbEx => ({
+      const res = await fetch("/api/exercises");
+      const data = await res.json();
+      if (data.exercises) {
+        const mapped: Exercise[] = data.exercises.map((dbEx: any) => ({
           id: dbEx.id,
           prompt: dbEx.prompt,
           expr: dbEx.correct_expr,
@@ -128,26 +128,14 @@ export default function AriadnaApp() {
 
   async function checkClassSession() {
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!supabaseUrl || !supabaseKey) return;
-      const { createClient } = await import("@supabase/supabase-js");
-      const sb = createClient(supabaseUrl, supabaseKey);
-      // Use maybeSingle() so no exception is thrown when there's no active session
-      const { data } = await sb
-        .from("class_sessions")
-        .select("exercise_ids")
-        .eq("active", true)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (data?.exercise_ids && Array.isArray(data.exercise_ids) && data.exercise_ids.length > 0) {
-        setClassExerciseIds(data.exercise_ids);
+      const res = await fetch("/api/sessions");
+      const data = await res.json();
+      if (data.activeSession?.exercise_ids?.length > 0) {
+        setClassExerciseIds(data.activeSession.exercise_ids);
         setClassSessionActive(true);
       }
     } catch {
-      // No active class session — normal flow
+      // No active class session
     }
   }
 
@@ -720,6 +708,27 @@ export default function AriadnaApp() {
             <button onClick={handleGoToReview} className="prereq-btn">
               Repasar {DAG[reviewNode]?.label ?? "prerrequisito"} ↗
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Scratchpad Panel (Bloc de notas) ── */}
+      <div className={`scratchpad-panel ${scratchpadOpen ? "open" : ""}`}>
+        <div className="scratchpad-header" onClick={() => setScratchpadOpen(!scratchpadOpen)}>
+          <span>🗒️ Bloc de Notas</span>
+          <button className="scratchpad-toggle">
+            {scratchpadOpen ? "▼" : "▲"}
+          </button>
+        </div>
+        {scratchpadOpen && (
+          <div className="scratchpad-body">
+            <textarea
+              className="scratchpad-textarea"
+              placeholder="Usa este espacio como borrador para realizar despejes o anotar tus cálculos temporales..."
+              value={scratchpadText}
+              onChange={e => setScratchpadText(e.target.value)}
+              spellCheck={false}
+            />
           </div>
         )}
       </div>

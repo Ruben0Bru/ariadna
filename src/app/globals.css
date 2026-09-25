@@ -1182,3 +1182,89 @@ code {
   color: var(--warn);
   font-size: 0.88rem;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   SCRATCHPAD (Bloc de Notas)
+══════════════════════════════════════════════════════════════ */
+.scratchpad-panel {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 320px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.scratchpad-panel:not(.open) {
+  height: 44px;
+}
+
+.scratchpad-panel.open {
+  height: 380px;
+}
+
+.scratchpad-header {
+  height: 44px;
+  padding: 0 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.scratchpad-header:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.scratchpad-toggle {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 0.8rem;
+}
+
+.scratchpad-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+
+.scratchpad-textarea {
+  flex: 1;
+  background: rgba(25, 24, 48, 0.5);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 12px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: none;
+  outline: none;
+}
+
+.scratchpad-textarea:focus {
+  border-color: var(--thread-dim);
+}
+
+@media (max-width: 520px) {
+  .scratchpad-panel {
+    display: none;
+  }
+}
+
