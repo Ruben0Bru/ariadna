@@ -9,9 +9,10 @@ interface FeedbackBoxProps {
   tag: string;
   text: string;
   loading: boolean;
+  onAction?: () => void;
 }
 
-export default function FeedbackBox({ state, tag, text, loading }: FeedbackBoxProps) {
+export default function FeedbackBox({ state, tag, text, loading, onAction }: FeedbackBoxProps) {
   if (state === "hidden") return null;
 
   return (
@@ -31,6 +32,25 @@ export default function FeedbackBox({ state, tag, text, loading }: FeedbackBoxPr
           </ReactMarkdown>
         )}
       </div>
+      {!loading && state === "warn" && onAction && (
+        <div style={{ marginTop: "12px", textAlign: "right" }}>
+          <button 
+            onClick={onAction}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--accent-glow)",
+              color: "var(--accent-glow)",
+              padding: "6px 14px",
+              borderRadius: "6px",
+              fontSize: "0.85rem",
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            Responder a Ariadna 💬
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -16,10 +16,11 @@ interface ChatPanelProps {
   currentExercise?: string;
   groupId: number;
   studentId: string;
+  open: boolean;
+  onToggle: () => void;
 }
 
-export default function ChatPanel({ currentNode, currentNodeLabel, currentExercise, groupId, studentId }: ChatPanelProps) {
-  const [open, setOpen] = useState(false);
+export default function ChatPanel({ currentNode, currentNodeLabel, currentExercise, groupId, studentId, open, onToggle }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -74,29 +75,21 @@ export default function ChatPanel({ currentNode, currentNodeLabel, currentExerci
   return (
     <>
       {/* Floating trigger button */}
-      <button
-        id="chatToggleBtn"
-        className="chat-fab"
-        onClick={() => setOpen(o => !o)}
-        aria-label={open ? "Cerrar chat de dudas" : "Abrir chat de dudas"}
-        title="Chat de dudas con Ariadna"
-      >
-        {open ? "✕" : "💬"}
-        {!open && <span className="chat-fab-label">Dudas</span>}
+      <button className={`chat-fab ${open ? "hiding" : ""}`} onClick={onToggle} title="Chat de dudas con Ariadna">
+        <span className="icon">💬</span>
+        <span className="label">¿Dudas?</span>
       </button>
 
-      {/* Chat panel */}
       {open && (
-        <div className="chat-panel" role="dialog" aria-label="Chat de dudas de Cálculo I">
-          <div className="chat-panel-header">
-            <div className="chat-panel-title">
-              <span className="chat-panel-icon">🧵</span>
-              <div>
-                <div className="chat-panel-name">Ariadna · Dudas</div>
-                <div className="chat-panel-node">{currentNodeLabel}</div>
+        <div className="chat-panel">
+          <div className="chat-header">
+            <div>
+              <strong>Ariadna</strong> · Dudas
+              <div style={{ fontSize: "0.6rem", textTransform: "uppercase", letterSpacing: 1, opacity: 0.8 }}>
+                {currentNodeLabel}
               </div>
             </div>
-            <button className="chat-panel-close" onClick={() => setOpen(false)}>✕</button>
+            <button className="chat-close" onClick={onToggle}>✕</button>
           </div>
 
           <div className="chat-messages">

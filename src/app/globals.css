@@ -24,7 +24,7 @@ body {
   color: var(--text);
   font-family: 'Inter', sans-serif;
   min-height: 100vh;
-  padding: 40px 20px 80px;
+  padding: 40px 20px 140px;
 }
 
 .wrap {
@@ -195,7 +195,7 @@ h1 em {
   font-family: 'Newsreader', serif;
   font-size: 1.35rem;
   line-height: 1.5;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .problem .fn {
@@ -334,6 +334,111 @@ footer {
   color: var(--text-dim);
   border-top: 1px solid var(--line);
   padding-top: 16px;
+}
+
+/* ── Notation hint ── */
+.notation-hint {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+/* ── Review banner ── */
+.review-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: rgba(217, 122, 92, 0.1);
+  border: 1px solid var(--warn);
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+  font-size: 0.9rem;
+  color: var(--warn);
+}
+
+.review-return-btn {
+  background: transparent;
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.review-return-btn:hover {
+  background: rgba(217, 122, 92, 0.15);
+}
+
+/* ── Prereq suggestion ── */
+.prereq-suggestion {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: rgba(212, 166, 87, 0.08);
+  border: 1px solid var(--thread-dim);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+
+.prereq-suggestion p {
+  margin: 0 0 10px;
+}
+
+.prereq-btn {
+  background: var(--thread);
+  color: #111;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.2s;
+}
+
+.prereq-btn:hover {
+  filter: brightness(1.1);
+}
+
+/* ── Math Preview (live formula renderer) ── */
+.math-preview {
+  margin: 8px 0 12px;
+  padding: 10px 16px 8px;
+  background: rgba(212, 166, 87, 0.06);
+  border: 1px solid rgba(212, 166, 87, 0.2);
+  border-radius: 10px;
+  animation: fadeIn 0.15s ease;
+}
+
+.math-preview-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--thread-dim);
+  margin-bottom: 4px;
+}
+
+.math-preview-render {
+  color: var(--text);
+  overflow-x: auto;
+  text-align: center;
+  padding: 4px 0;
+}
+
+.math-preview-error {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-style: italic;
+  text-align: center;
+  padding: 4px 0;
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -638,8 +743,9 @@ footer {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  width: 56px;
   height: 56px;
+  width: auto;
+  min-width: 56px;
   border-radius: 28px;
   background: var(--thread);
   color: #111;
@@ -648,11 +754,12 @@ footer {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
+  padding: 0 20px 0 16px;
   font-size: 1.5rem;
   cursor: pointer;
   z-index: 1000;
-  transition: transform 0.2s, width 0.2s;
-  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
   white-space: nowrap;
 }
 

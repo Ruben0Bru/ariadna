@@ -29,31 +29,42 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Flujo de docente ────────────────────────────────────────────────────────
+  // Accept any PROF-* code — the teachers table is optional.
+  // If the table doesn't exist or the code isn't registered, still allow login
+  // as the teacher dashboard only needs a session identifier.
   if (isTeacherCode(code)) {
     if (!supabaseUrl || !supabaseKey) {
-      // Modo offline: aceptar cualquier código PROF-
-      return NextResponse.json({ teacherId: code, name: "Docente (modo offline)", offline: true });
+      return NextResponse.json({ teacherId: code, name: `Docente (${code})`, offline: true });
     }
+
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const { data, error } = await supabase
-      .from("teachers")
-      .select("id, name")
-      .eq("code", code)
-      .maybeSingle();
 
-    if (error) {
-      console.error("[Ariadna/login] Error al buscar docente:", error);
-      return NextResponse.json({ error: "Error de base de datos." }, { status: 500 });
+    // Try to look up the teacher — but treat ANY error as "accept with offline mode"
+    // because the teachers table may not exist in all environments.
+    try {
+      const { data, error } = await supabase
+        .from("teachers")
+        .select("id, name")
+        .eq("code", code)
+        .maybeSingle();
+
+      // If query succeeded and we found a record, return it
+      if (!error && data) {
+        return NextResponse.json({ teacherId: data.id, name: data.name });
+      }
+
+      // If query succeeded but no record, still accept the code (open registration)
+      if (!error && !data) {
+        return NextResponse.json({ teacherId: code, name: `Docente (${code})` });
+      }
+
+      // For any DB error (including PGRST125 = table not found), accept gracefully
+      console.warn("[Ariadna/login] No se pudo consultar tabla teachers (puede no existir):", error?.message);
+      return NextResponse.json({ teacherId: code, name: `Docente (${code})`, offline: true });
+    } catch (e) {
+      console.warn("[Ariadna/login] Excepción al buscar docente:", e);
+      return NextResponse.json({ teacherId: code, name: `Docente (${code})`, offline: true });
     }
-
-    if (!data) {
-      return NextResponse.json(
-        { error: `Código de docente "${code}" no registrado. Contacta al administrador.` },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ teacherId: data.id, name: data.name });
   }
 
   // ── Flujo de estudiante ─────────────────────────────────────────────────────
@@ -74,7 +85,7 @@ export async function POST(req: NextRequest) {
   if (selectError) {
     console.error("[Ariadna/login] Error en lectura de estudiante:", selectError);
     return NextResponse.json(
-      { error: `Error DB en lectura: ${selectError.message}. Verifica que la columna mastered_nodes exista.` },
+      { error: `Error DB en lectura: ${selectError.message}. Verifica que la tabla students exista.` },
       { status: 500 }
     );
   }

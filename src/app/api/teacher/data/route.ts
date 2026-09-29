@@ -12,14 +12,23 @@ export async function GET() {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    const { data: students } = await supabase.from("students").select("id, code, group_id, mastered_nodes");
-    const { data: attempts } = await supabase.from("attempts").select("student_id");
-    const { data: exercises } = await supabase.from("exercises").select("*").order("id", { ascending: true });
+    let students: any[] = [];
+    let attempts: any[] = [];
+    let exercises: any[] = [];
+
+    const { data: sData, error: sErr } = await supabase.from("students").select("id, code, group_id, mastered_nodes");
+    if (!sErr && sData) students = sData;
+
+    const { data: aData, error: aErr } = await supabase.from("attempts").select("student_id");
+    if (!aErr && aData) attempts = aData;
+
+    const { data: eData, error: eErr } = await supabase.from("exercises").select("*").order("id", { ascending: true });
+    if (!eErr && eData) exercises = eData;
 
     return NextResponse.json({
-      students: students || [],
-      attempts: attempts || [],
-      exercises: exercises || []
+      students,
+      attempts,
+      exercises
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

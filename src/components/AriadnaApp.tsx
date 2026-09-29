@@ -8,6 +8,7 @@ import ThreadMap from "@/components/ThreadMap";
 import FeedbackBox from "@/components/FeedbackBox";
 import ConceptCard from "@/components/ConceptCard";
 import ChatPanel from "@/components/ChatPanel";
+import MathPreview from "@/components/MathPreview";
 
 type FeedbackState = "hidden" | "ok" | "warn";
 
@@ -57,6 +58,10 @@ export default function AriadnaApp() {
   // ── Exercise state ───────────────────────────────────────────────────────────
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
   const [exercisesLoaded, setExercisesLoaded] = useState(false);
+
+  // ── Chat Panel state ─────────────────────────────────────────────────────────
+  const [chatOpen, setChatOpen] = useState(false);
+
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [current, setCurrent] = useState(0);
 
@@ -219,6 +224,7 @@ export default function AriadnaApp() {
           studentId: session.studentId,
           exerciseId: ex.id,
           studentAnswer: inputValue.trim(),
+          groupId: session.groupId,
         }),
       });
 
@@ -683,6 +689,9 @@ export default function AriadnaApp() {
           )}
         </div>
 
+        {/* ── Live math formula preview ── */}
+        <MathPreview input={inputValue} />
+
         {failedAttempts >= 3 && !checking && feedbackState !== "ok" && (
           <div style={{ marginTop: "10px", textAlign: "right" }}>
             <button onClick={handleSkip} className="skip-btn">
@@ -700,6 +709,7 @@ export default function AriadnaApp() {
           tag={feedbackTag}
           text={feedbackText}
           loading={feedbackLoading}
+          onAction={() => setChatOpen(true)}
         />
 
         {reviewNode && !checking && feedbackState === "warn" && (
@@ -740,10 +750,12 @@ export default function AriadnaApp() {
         currentExercise={ex?.prompt}
         groupId={session.groupId}
         studentId={session.studentId}
+        open={chatOpen}
+        onToggle={() => setChatOpen(!chatOpen)}
       />
 
       <footer>
-        Ariadna — Ingeniería de Sistemas, Universidad de Córdoba · Verificación matemática real (mathjs)
+        Ariadna — Ingeniería de Sistemas, Universidad de Córdoba · Motor de verificación numérica (mathjs)
       </footer>
     </>
   );

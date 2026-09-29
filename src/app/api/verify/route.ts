@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { evaluate } from "mathjs";
+import { EXERCISES } from "@/lib/dag";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -10,13 +11,25 @@ interface VerifyBody {
   studentId: string;
   exerciseId: number;
   studentAnswer: string;
+  groupId?: number;
 }
 
 function toMathjs(expr: string): string {
-  return expr
+  let processed = expr
     .replace(/\*\*/g, "^")
     .replace(/sqrt\(/g, "sqrt(")
     .trim();
+
+  // If the user typed LaTeX fraction \frac{a}{b}, attempt basic conversion to (a)/(b)
+  // This is a safety net since MathPreview displays LaTeX
+  processed = processed.replace(/\\frac{([^{}]+)}{([^{}]+)}/g, "($1)/($2)");
+  
+  // Strip any remaining backslashes (e.g. \cdot)
+  processed = processed.replace(/\\cdott/g, "*");
+  processed = processed.replace(/\\cdot/g, "*");
+  processed = processed.replace(/\\/g, "");
+
+  return processed;
 }
 
 function evalAt(expr: string, val: number, variable: string = "x"): number | null {
@@ -74,7 +87,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
-  const { studentId, exerciseId, studentAnswer } = body;
+  const { studentId, exerciseId, studentAnswer, groupId } = body;
 
   if (!studentId || !exerciseId || !studentAnswer?.trim()) {
     return NextResponse.json({ error: "Faltan campos requeridos." }, { status: 400 });
@@ -86,16 +99,33 @@ export async function POST(req: NextRequest) {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  // FETCH NATIVE SUPERBASE EXERCISE
-  const { data: ex, error: exError } = await supabase
+  // FETCH EXERCISE — try DB first, fall back to local bank
+  let ex: { node_id: string; correct_expr: string; variable: string; prereq_on_fail: string | null; fail_reason: string | null } | null = null;
+
+  const { data: dbEx, error: exError } = await supabase
     .from("exercises")
     .select("node_id, correct_expr, variable, prereq_on_fail, fail_reason")
     .eq("id", exerciseId)
     .single();
 
-  if (exError || !ex) {
-    console.error(exError);
-    return NextResponse.json({ error: `Ejercicio ${exerciseId} no funciona o no existe.` }, { status: 404 });
+  if (!exError && dbEx) {
+    ex = dbEx;
+  } else {
+    // Fall back to local hardcoded bank
+    const localEx = EXERCISES.find(e => e.id === exerciseId);
+    if (localEx) {
+      ex = {
+        node_id: localEx.node,
+        correct_expr: localEx.expr,
+        variable: "x",
+        prereq_on_fail: localEx.prereqOnFail || null,
+        fail_reason: localEx.failReason || null,
+      };
+    }
+  }
+
+  if (!ex) {
+    return NextResponse.json({ error: `Ejercicio ${exerciseId} no encontrado.` }, { status: 404 });
   }
 
   const variable = ex.variable || "x";
@@ -153,6 +183,7 @@ export async function POST(req: NextRequest) {
       error_type: errorType,
       prereq_suggested: prereqSuggested,
       response_time_ms: Date.now() - startedAt,
+      group_id: groupId ?? null,
     })
     .select("id")
     .maybeSingle();
