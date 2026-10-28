@@ -1,4 +1,5 @@
-backend/
-supabase/
+# Archivos que Vercel no necesita desplegar
 .agent/
 .vscode/
+# supabase/migrations se conserva en el repositorio pero Vercel no las ejecuta —
+# correr manualmente en el SQL Editor de Supabase.

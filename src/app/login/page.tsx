@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { useState, useEffect } from "react";
 import { saveSession, saveTeacherSession, isTeacherCode } from "@/lib/session";
 
 export default function LoginPage() {
@@ -13,26 +12,12 @@ export default function LoginPage() {
 
   const codeIsTeacher = isTeacherCode(code);
 
-  const supabase = useMemo<SupabaseClient | null>(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) return null;
-    return createClient(url, key);
-  }, []);
-
   useEffect(() => {
-    if (!supabase) return;
-    async function checkClassSession() {
-      const { data } = await supabase!
-        .from("class_sessions")
-        .select("id")
-        .eq("active", true)
-        .limit(1)
-        .maybeSingle();
-      if (data) setClassActive(true);
-    }
-    checkClassSession();
-  }, [supabase]);
+    fetch("/api/class-session-status")
+      .then((r) => r.json())
+      .then((d) => { if (d.active) setClassActive(true); })
+      .catch(() => {});
+  }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
