@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { getTeacherSession, clearTeacherSession } from "@/lib/session";
-import { DAG, DAG_ORDER } from "@/lib/dag";
+import { DAG, DAG_ORDER, EXERCISES } from "@/lib/dag";
 
 interface StudentStat {
   student_id: string;
@@ -13,55 +13,45 @@ interface StudentStat {
   mastered_nodes: string[];
 }
 
-interface DbExercise {
-  id: number;
-  node_id: string;
-  prompt: string;
-  correct_expr: string;
-  exercise_type?: string;
-  active?: boolean;
-}
-
 type Tab = "dashboard" | "session" | "exercises";
 
 export default function TeacherDashboard() {
   const [tab, setTab] = useState<Tab>("dashboard");
-  const [teacherSession, setTeacherSession] = useState<{ code: string; name: string } | null>(
-    () => (typeof window !== "undefined" ? getTeacherSession() : null)
-  );
+  const [teacherSession, setTeacherSession] = useState<{ code: string; name: string } | null>(null);
   const [stats, setStats] = useState<StudentStat[]>([]);
   const [loading, setLoading] = useState(false);
-  const [dbExercises, setDbExercises] = useState<DbExercise[]>([]);
+  const [dbExercises, setDbExercises] = useState<any[]>([]);
 
   // Class session state
   const [selectedNode, setSelectedNode] = useState<string>(DAG_ORDER[0]);
   const [selectedExercises, setSelectedExercises] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<"none" | "active" | "saving">("none");
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!teacherSession) { window.location.href = "/login"; return; }
+    const ts = getTeacherSession();
+    if (!ts) { window.location.href = "/login"; return; }
+    setTeacherSession(ts);
     fetchData();
     checkActiveSession();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchData() {
     setLoading(true);
     try {
       const res = await fetch("/api/teacher/data");
+      if (res.status === 401) { clearTeacherSession(); window.location.href = "/login"; return; }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      const combined: StudentStat[] = (data.students || []).map((s: Record<string, unknown>) => ({
-        student_id: s.id as string,
-        code: s.code as string,
-        group_id: s.group_id as number,
-        mastered_nodes: (s.mastered_nodes as string[]) || [],
-        mastered_count: ((s.mastered_nodes as string[]) || []).length,
-        attempts_count: (data.attempts || []).filter((a: Record<string, unknown>) => a.student_id === s.id).length,
+      const combined: StudentStat[] = (data.students || []).map((s: any) => ({
+        student_id: s.id,
+        code: s.code,
+        group_id: s.group_id,
+        mastered_nodes: s.mastered_nodes || [],
+        mastered_count: (s.mastered_nodes || []).length,
+        attempts_count: (data.attempts || []).filter((a: any) => a.student_id === s.id).length,
       }));
 
       combined.sort((a, b) => {
@@ -70,7 +60,7 @@ export default function TeacherDashboard() {
       });
 
       setStats(combined);
-      setDbExercises((data.exercises || []) as DbExercise[]);
+      setDbExercises(data.exercises || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -108,8 +98,8 @@ export default function TeacherDashboard() {
       setNewExExpr("");
       await fetchData(); // refresca la tabla
       alert("Ejercicio creado exitosamente.");
-    } catch (err: unknown) {
-      alert("Error creando ejercicio: " + (err instanceof Error ? err.message : String(err)));
+    } catch (err: any) {
+      alert("Error creando ejercicio: " + err.message);
     } finally {
       setCreatingEx(false);
     }
@@ -119,14 +109,16 @@ export default function TeacherDashboard() {
 
 
   async function checkActiveSession() {
+    let data: { id: string; exercise_ids: number[] } | null = null;
     try {
-      const res = await fetch("/api/class-session-status");
-      const data = await res.json();
-      if (data.active && data.sessionId) {
-        setSessionStatus("active");
-      }
-    } catch (e) {
-      console.warn("[Ariadna/teacher] No se pudo verificar sesión activa:", e);
+      const res = await fetch("/api/teacher/export?type=active_session");
+      if (res.ok) data = (await res.json()).data;
+    } catch { /* sin sesión activa */ }
+
+    if (data) {
+      setActiveSessionId(data.id);
+      setSessionStatus("active");
+      setSelectedExercises(new Set(data.exercise_ids));
     }
   }
 
@@ -149,10 +141,10 @@ export default function TeacherDashboard() {
 
       setActiveSessionId(data.sessionId);
       setSessionStatus("active");
-    } catch (e: unknown) {
+    } catch (e: any) {
       console.error(e);
       setSessionStatus("none");
-      alert("Error al activar la sesión: " + (e instanceof Error ? e.message : String(e)));
+      alert("Error al activar la sesión: " + e.message);
     } finally {
       setSaving(false);
     }
@@ -182,19 +174,64 @@ export default function TeacherDashboard() {
     });
   }
 
+  // CSV con escape RFC-4180 y BOM UTF-8 (para que Excel lea bien las tildes).
+  function csvCell(v: unknown): string {
+    const t = v === null || v === undefined ? "" : String(v);
+    return `"${t.replace(/"/g, '""')}"`;
+  }
 
+  function downloadCSV(filename: string, content: string) {
+    const blob = new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.setAttribute("href", URL.createObjectURL(blob));
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 
-  // TODO Fase 10: mover a /api/teacher/export?type=attempts (service role)
+  async function fetchExport(type: "attempts" | "chats"): Promise<any[] | null> {
+    try {
+      const res = await fetch(`/api/teacher/export?type=${type}`);
+      if (res.status === 401) { clearTeacherSession(); window.location.href = "/login"; return null; }
+      const json = await res.json();
+      if (!res.ok) { alert("Error: " + (json.error ?? res.status)); return null; }
+      return json.data ?? [];
+    } catch {
+      alert("Error de red al descargar los datos.");
+      return null;
+    }
+  }
+
   async function downloadAttemptsLog() {
-    alert("La exportación de intentos se implementará en Fase 10 (panel del investigador).");
+    const data = await fetchExport("attempts");
+    if (!data) return;
+    if (!data.length) { alert("Sin datos"); return; }
+    const cols = ["id", "student_code", "group_id", "exercise_id", "node_id", "student_answer", "is_correct", "error_type", "prereq_suggested", "llm_feedback", "response_time_ms", "created_at"];
+    const rows = data.map(d =>
+      [d.id, d.students?.code, d.students?.group_id ?? d.group_id, d.exercise_id, d.node_id, d.student_answer, d.is_correct, d.error_type, d.prereq_suggested, d.llm_feedback, d.response_time_ms, d.created_at]
+        .map(csvCell).join(",")
+    );
+    downloadCSV("ariadna_attempts_log.csv", cols.join(",") + "\n" + rows.join("\n"));
   }
 
-  // TODO Fase 10: mover a /api/teacher/export?type=chat (service role)
   async function downloadChatLogs() {
-    alert("La exportación del chat se implementará en Fase 10 (panel del investigador).");
+    const data = await fetchExport("chats");
+    if (!data) return;
+    if (!data.length) { alert("Sin datos"); return; }
+    const cols = ["id", "student_code", "group_id", "node_context", "turn_number", "user_prompt", "ai_response", "created_at"];
+    const rows = data.map(d =>
+      [d.id, d.students?.code, d.students?.group_id ?? d.group_id, d.node_context, d.turn_number, d.user_prompt, d.ai_response, d.created_at]
+        .map(csvCell).join(",")
+    );
+    downloadCSV("ariadna_chat_logs.csv", cols.join(",") + "\n" + rows.join("\n"));
   }
 
-  function handleLogout() { clearTeacherSession(); window.location.href = "/login"; }
+  async function handleLogout() {
+    try { await fetch("/api/logout", { method: "POST" }); } catch { /* ignore */ }
+    clearTeacherSession();
+    window.location.href = "/login";
+  }
 
   const nodeExercises = dbExercises.filter(e => e.node_id === selectedNode);
 
@@ -480,7 +517,7 @@ export default function TeacherDashboard() {
               </select>
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.9rem", color: "var(--text-dim)" }}>
-              Enunciado (ej. &quot;Deriva f(x) = x^2&quot;)
+              Enunciado (ej. "Deriva f(x) = x^2")
               <input 
                 type="text"
                 value={newExPrompt} 
@@ -490,7 +527,7 @@ export default function TeacherDashboard() {
               />
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.9rem", color: "var(--text-dim)" }}>
-              Respuesta Matemática Correcta (ej. &quot;2*x&quot;)
+              Respuesta Matemática Correcta (ej. "2*x")
               <input 
                 type="text"
                 value={newExExpr} 

@@ -23,13 +23,6 @@ function shuffle<T>(arr: T[]): T[] {
 
 const MASTERY_THRESHOLD = 3;
 
-// ── Group labels ────────────────────────────────────────────────────────────
-const GROUP_LABELS: Record<number, string> = {
-  1: "Grupo Control",
-  2: "Grupo Híbrido",
-  3: "Grupo Autónomo",
-};
-
 export default function AriadnaApp() {
   const router = useRouter();
   const [session, setSession] = useState<StudentSession | null>(null);
@@ -68,6 +61,8 @@ export default function AriadnaApp() {
   // ── Class session ────────────────────────────────────────────────────────────
   const [classExerciseIds, setClassExerciseIds] = useState<number[] | null>(null);
   const [classSessionActive, setClassSessionActive] = useState(false);
+  // El estudiante decide si quiere ver solo los ejercicios de clase (no se fuerza).
+  const [classMode, setClassMode] = useState(false);
 
   // ── Mastery ──────────────────────────────────────────────────────────────────
   const [consecutiveCorrect, setConsecutiveCorrect] = useState(0);
@@ -112,6 +107,7 @@ export default function AriadnaApp() {
   async function fetchAllExercises() {
     try {
       const res = await fetch("/api/exercises");
+      if (res.status === 401) { clearSession(); window.location.href = "/login"; return; }
       const data = await res.json();
       if (data.exercises) {
         const mapped: Exercise[] = data.exercises.map((dbEx: any) => ({
@@ -153,43 +149,33 @@ export default function AriadnaApp() {
     }
   }, [activeNode, conceptShown]);
 
-  // ── RF-15: Group 2 — max 5 exercises per session ────────────────────────────
-  const SESSION_LIMIT = session?.groupId === 2 ? 5 : Infinity;
-
-  // ── Load exercises when node / class session changes ─────────────────────────
+  // ── Load exercises when node / class mode changes ───────────────────────────
+  // Estudio libre: se practican TODOS los ejercicios del nodo (sin límite por sesión).
   useEffect(() => {
     let pool: Exercise[];
 
-    if (classSessionActive && classExerciseIds) {
-      // Class session active: show only the exercises the teacher assigned, regardless of node
+    if (classMode && classExerciseIds) {
+      // Solo si el estudiante eligió ver los ejercicios de clase.
       pool = allExercises.filter(e => classExerciseIds.includes(e.id));
-      // Drive the active node from the first exercise in the session
-      if (pool.length > 0 && pool[0].node && !isReviewMode) {
-        const sessionNode = pool[0].node;
-        if (sessionNode !== activeNode) {
-          setActiveNode(sessionNode);
-          mainNodeRef.current = sessionNode;
-          return; // let the effect re-run after the node is updated
-        }
-      }
     } else {
       pool = allExercises.filter(e => e.node === activeNode);
     }
 
-    const limited = pool.slice(0, SESSION_LIMIT === Infinity ? undefined : SESSION_LIMIT);
-    setExercises(shuffle(limited));
+    setExercises(shuffle(pool));
     setConsecutiveCorrect(0);
     setJustMastered(false);
 
     if (!isReviewMode && savedExerciseIndexRef.current > 0) {
-      setCurrent(Math.min(savedExerciseIndexRef.current, Math.max(0, limited.length - 1)));
+      setCurrent(Math.min(savedExerciseIndexRef.current, Math.max(0, pool.length - 1)));
       savedExerciseIndexRef.current = 0;
     } else {
       setCurrent(0);
     }
-  }, [activeNode, SESSION_LIMIT, classSessionActive, classExerciseIds, allExercises]);
+  }, [activeNode, classMode, classExerciseIds, allExercises]);
 
   const ex: Exercise | undefined = exercises[current];
+  // Nodo real del ejercicio en pantalla (en "ejercicios de clase" puede variar).
+  const exNode = ex?.node ?? activeNode;
 
   // Reset on exercise change
   useEffect(() => {
@@ -221,12 +207,16 @@ export default function AriadnaApp() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          studentId: session.studentId,
           exerciseId: ex.id,
           studentAnswer: inputValue.trim(),
-          groupId: session.groupId,
         }),
       });
+
+      if (res.status === 401) {
+        clearSession();
+        window.location.href = "/login";
+        return;
+      }
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -256,8 +246,8 @@ export default function AriadnaApp() {
       const newConsec = consecutiveCorrect + 1;
       setConsecutiveCorrect(newConsec);
       setReviewNode(null);
-      if (newConsec >= MASTERY_THRESHOLD && !masteredNodes.has(activeNode)) {
-        const newMastered = new Set([...masteredNodes, activeNode]);
+      if (newConsec >= MASTERY_THRESHOLD && !masteredNodes.has(ex.node)) {
+        const newMastered = new Set([...masteredNodes, ex.node]);
         setMasteredNodes(newMastered);
         setJustMastered(true);
         if (session) saveSession({ ...session, masteredNodes: [...newMastered] });
@@ -298,7 +288,7 @@ export default function AriadnaApp() {
         );
       })
       .finally(() => setFeedbackLoading(false));
-  }, [inputValue, checking, ex, session, activeNode, consecutiveCorrect, masteredNodes, failedAttempts]);
+  }, [inputValue, checking, ex, session, consecutiveCorrect, masteredNodes, failedAttempts]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") handleCheck();
@@ -310,7 +300,28 @@ export default function AriadnaApp() {
     } else if (isReviewMode) {
       setActiveNode(mainNodeRef.current);
       setReviewNode(null);
+    } else {
+      // Terminó todos los ejercicios del tema: pantalla de cierre con opciones.
+      setCurrent(exercises.length);
     }
+  }
+
+  // Repetir el tema (nuevo orden aleatorio) o pasar a elegir otro.
+  function handleRepeatTopic() {
+    setExercises(prev => shuffle(prev));
+    setCurrent(0);
+    setConsecutiveCorrect(0);
+  }
+
+  function handleEnterClassMode() {
+    if (!classExerciseIds) return;
+    const first = allExercises.find(e => classExerciseIds.includes(e.id));
+    if (first) {
+      mainNodeRef.current = first.node;
+      setActiveNode(first.node);
+    }
+    setReviewNode(null);
+    setClassMode(true);
   }
 
   function handleGoToReview() {
@@ -327,10 +338,9 @@ export default function AriadnaApp() {
   }
 
   function handleNodeClick(nodeId: string) {
-    if (nodeId === activeNode) return;
-    const prereqs = DAG[nodeId]?.prereqs ?? [];
-    const accessible = prereqs.every(p => masteredNodes.has(p)) || masteredNodes.has(nodeId);
-    if (!accessible) return;
+    if (nodeId === activeNode && !classMode) return;
+    // Estudio libre: cualquier tema es accesible, sin exigir prerrequisitos.
+    setClassMode(false);
     mainNodeRef.current = nodeId;
     setActiveNode(nodeId);
     setReviewNode(null);
@@ -342,21 +352,25 @@ export default function AriadnaApp() {
     setFeedbackText(`La respuesta esperada era: ${ex?.expr}.`);
   }
 
-  function handleLogout() { clearSession(); window.location.href = "/login"; }
+  async function handleLogout() {
+    try { await fetch("/api/logout", { method: "POST" }); } catch { /* ignore */ }
+    clearSession();
+    window.location.href = "/login";
+  }
 
   function handleConceptDone() {
     setConceptShown(prev => new Set([...prev, activeNode]));
     setShowingConcept(false);
   }
 
-  function handleContinueAfterMastery() {
+  // Tras dominar un tema, el estudiante decide qué hacer (no se avanza solo).
+  function handleChooseAnotherTopic() {
     setJustMastered(false);
-    const newMastered = new Set([...masteredNodes, activeNode]);
-    const next = DAG_ORDER.find(n => !newMastered.has(n));
-    if (next) {
-      mainNodeRef.current = next;
-      setActiveNode(next);
-    }
+    setPhase("pick");
+  }
+
+  function handleKeepPracticing() {
+    setJustMastered(false);
   }
 
   // ── Guard: loading session ────────────────────────────────────────────────────
@@ -379,7 +393,7 @@ export default function AriadnaApp() {
             Hola, <em>{session.name ?? session.code}</em> 👋
           </h1>
           <p className="welcome-subtitle">
-            {GROUP_LABELS[session.groupId] ?? `Grupo ${session.groupId}`}
+            Practica a tu ritmo: elige el tema que quieras repasar.
           </p>
 
           {/* Progress summary */}
@@ -420,12 +434,21 @@ export default function AriadnaApp() {
               </button>
             </>
           ) : (
-            <button
-              className="welcome-btn welcome-btn-primary"
-              onClick={() => setPhase("learning")}
-            >
-              Continuar con <em>{DAG[activeNode]?.label}</em> →
-            </button>
+            <>
+              <button
+                className="welcome-btn welcome-btn-primary"
+                onClick={() => setPhase("learning")}
+              >
+                Continuar con <em>{DAG[activeNode]?.label}</em> →
+              </button>
+              <button
+                className="welcome-btn welcome-btn-secondary"
+                style={{ marginTop: 10 }}
+                onClick={() => setPhase("pick")}
+              >
+                Elegir otro tema
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -442,28 +465,31 @@ export default function AriadnaApp() {
             ¿Desde dónde quieres empezar?
           </h2>
           <p className="welcome-hint">
-            Ariadna evaluará tu nivel mientras practicas. Puedes empezar desde un tema avanzado o desde los fundamentos.
+            Puedes practicar el tema que quieras, en el orden que prefieras. Los temas marcados con ✓ ya los dominaste.
           </p>
           <div className="node-picker-grid">
             {DAG_ORDER.map(n => {
               const prereqs = DAG[n]?.prereqs ?? [];
               const label = DAG[n]?.label;
               const unit = DAG[n]?.unit;
+              const done = masteredNodes.has(n);
               return (
                 <button
                   key={n}
                   className="node-picker-card"
                   onClick={() => {
+                    setClassMode(false);
+                    setReviewNode(null);
                     mainNodeRef.current = n;
                     setActiveNode(n);
                     setPhase("learning");
                   }}
                 >
                   <span className="node-picker-unit">{unit}</span>
-                  <span className="node-picker-label">{label}</span>
+                  <span className="node-picker-label">{done ? "✓ " : ""}{label}</span>
                   {prereqs.length > 0 && (
                     <span className="node-picker-prereqs">
-                      Requiere: {prereqs.map(p => DAG[p]?.label).join(", ")}
+                      Recomendado antes: {prereqs.map(p => DAG[p]?.label).join(", ")}
                     </span>
                   )}
                 </button>
@@ -484,9 +510,7 @@ export default function AriadnaApp() {
 
   // ── Guard: mastery screen ─────────────────────────────────────────────────────
   if (justMastered) {
-    const nodeName = DAG[activeNode]?.label ?? activeNode;
-    const newMastered = new Set([...masteredNodes, activeNode]);
-    const next = DAG_ORDER.find(n => !newMastered.has(n));
+    const nodeName = DAG[exNode]?.label ?? exNode;
     return (
       <div className="mastery-screen" role="dialog" aria-label="Nodo dominado">
         <div className="mastery-icon">🏆</div>
@@ -496,28 +520,40 @@ export default function AriadnaApp() {
         </p>
         <div className="mastery-node-badge">{nodeName}</div>
         <p className="mastery-body">
-          {next
-            ? `El siguiente tema es: ${DAG[next].label}`
-            : "¡Has completado todos los temas! Eres increíble."}
+          Puedes seguir practicando este tema o elegir otro.
         </p>
-        <button className="mastery-continue-btn" onClick={handleContinueAfterMastery}>
-          {next ? `Ir a ${DAG[next].label} →` : "Ver mi resumen final →"}
+        <button className="mastery-continue-btn" onClick={handleChooseAnotherTopic}>
+          Elegir otro tema →
+        </button>
+        <button
+          className="mastery-continue-btn"
+          style={{ marginTop: 10, background: "transparent", border: "1px solid var(--line)", color: "var(--text-main)" }}
+          onClick={handleKeepPracticing}
+        >
+          Seguir practicando este tema
         </button>
       </div>
     );
   }
 
-  // ── Guard: RF-15 Grupo 2 session completed ────────────────────────────────────
-  if (session.groupId === 2 && current >= exercises.length && exercises.length > 0 && !isReviewMode && !justMastered) {
+  // ── Guard: terminó todos los ejercicios del tema ──────────────────────────────
+  if (exercises.length > 0 && current >= exercises.length && !isReviewMode) {
     return (
       <div style={{ textAlign: "center", padding: "80px 20px", color: "var(--text-main)" }}>
-        <h2 style={{ fontSize: "1.8rem", marginBottom: "12px" }}>Sesión completada 🎓</h2>
+        <h2 style={{ fontSize: "1.8rem", marginBottom: "12px" }}>
+          {classMode ? "Terminaste los ejercicios de clase 🎓" : "Terminaste los ejercicios de este tema 🎓"}
+        </h2>
         <p style={{ color: "var(--text-dim)", maxWidth: "420px", margin: "0 auto 24px" }}>
-          Has terminado los ejercicios de esta sesión. Tu progreso queda guardado.
+          Tu progreso queda guardado. Puedes repetir el tema o elegir otro.
         </p>
-        <button onClick={handleLogout} className="welcome-btn welcome-btn-primary">
-          Cerrar sesión
-        </button>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+          <button onClick={handleRepeatTopic} className="welcome-btn welcome-btn-secondary">
+            Repetir ejercicios
+          </button>
+          <button onClick={() => { setClassMode(false); setPhase("pick"); }} className="welcome-btn welcome-btn-primary">
+            Elegir otro tema →
+          </button>
+        </div>
       </div>
     );
   }
@@ -553,8 +589,8 @@ export default function AriadnaApp() {
         <div style={{ fontSize: "2.5rem", marginBottom: "16px" }}>📭</div>
         <h2 style={{ color: "var(--text-main)", marginBottom: "8px" }}>Sin ejercicios disponibles</h2>
         <p style={{ marginBottom: "24px", maxWidth: "400px", margin: "0 auto 24px" }}>
-          La base de datos no tiene ejercicios para el tema <strong>{DAG[activeNode]?.label}</strong> todavía.
-          Pídele al docente que siembre el banco de ejercicios.
+          Todavía no hay ejercicios cargados para <strong>{DAG[activeNode]?.label}</strong>.
+          Elige otro tema mientras tanto.
         </p>
         <button
           onClick={() => setPhase("pick")}
@@ -573,10 +609,10 @@ export default function AriadnaApp() {
       <header>
         <div className="header-top">
           <div className="eyebrow">
-            ARIADNA · {DAG[activeNode]?.unit ?? "Cálculo I"}
-            {classSessionActive && (
+            ARIADNA · {DAG[exNode]?.unit ?? "Cálculo I"}
+            {classMode && (
               <span style={{ marginLeft: 10, background: "var(--accent-glow)", color: "#111", borderRadius: 6, padding: "2px 8px", fontSize: "0.72rem", fontWeight: 700 }}>
-                🏫 Clase activa
+                🏫 Clase
               </span>
             )}
           </div>
@@ -594,7 +630,6 @@ export default function AriadnaApp() {
               <div className="dropdown-menu" onMouseLeave={() => setMenuOpen(false)}>
                 <div className="dropdown-header">
                   <div style={{ fontWeight: 700, color: "var(--text-main)" }}>{session.name ?? session.code}</div>
-                  <div style={{ fontSize: "0.78rem", color: "var(--text-dim)" }}>{GROUP_LABELS[session.groupId]}</div>
                   <div style={{ fontSize: "0.78rem", color: "var(--text-dim)", marginTop: 2 }}>
                     Nodos dominados: {masteredNodes.size} / {DAG_ORDER.length}
                   </div>
@@ -629,7 +664,7 @@ export default function AriadnaApp() {
       <ThreadMap
         masteredNodes={masteredNodes}
         reviewNode={reviewNode}
-        currentNodeId={activeNode}
+        currentNodeId={exNode}
         onNodeClick={handleNodeClick}
       />
 
@@ -643,11 +678,32 @@ export default function AriadnaApp() {
         </div>
       )}
 
+      {/* ── Ejercicios de clase (opcional, no se fuerza) ── */}
+      {classSessionActive && classExerciseIds && (
+        <div className="review-banner">
+          {classMode ? (
+            <>
+              <span>🏫 Estás viendo los <strong>ejercicios de clase</strong></span>
+              <button onClick={() => setClassMode(false)} className="review-return-btn">
+                Volver a practicar libremente
+              </button>
+            </>
+          ) : (
+            <>
+              <span>🏫 Tu docente asignó ejercicios de clase</span>
+              <button onClick={handleEnterClassMode} className="review-return-btn">
+                Ver ejercicios de clase
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* ── Exercise card ── */}
       <div className="card">
         <div className="card-meta">
           <span className="card-label">Ejercicio {current + 1} / {exercises.length}</span>
-          <span className="card-node-badge">{DAG[activeNode]?.label ?? activeNode}</span>
+          <span className="card-node-badge">{DAG[exNode]?.label ?? exNode}</span>
           {consecutiveCorrect > 0 && !justMastered && (
             <span className="mastery-progress-badge">
               🔥 {consecutiveCorrect}/{MASTERY_THRESHOLD}
@@ -745,8 +801,8 @@ export default function AriadnaApp() {
 
       {/* ── Chat panel (dudas) ── */}
       <ChatPanel
-        currentNode={activeNode}
-        currentNodeLabel={DAG[activeNode]?.label ?? activeNode}
+        currentNode={exNode}
+        currentNodeLabel={DAG[exNode]?.label ?? exNode}
         currentExercise={ex?.prompt}
         groupId={session.groupId}
         studentId={session.studentId}

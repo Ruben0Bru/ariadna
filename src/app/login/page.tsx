@@ -6,17 +6,25 @@ import { saveSession, saveTeacherSession, isTeacherCode } from "@/lib/session";
 export default function LoginPage() {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [classActive, setClassActive] = useState(false);
 
   const codeIsTeacher = isTeacherCode(code);
 
+  // Consulta al servidor (sin claves de Supabase en el navegador).
   useEffect(() => {
-    fetch("/api/class-session-status")
-      .then((r) => r.json())
-      .then((d) => { if (d.active) setClassActive(true); })
-      .catch(() => {});
+    async function checkClassSession() {
+      try {
+        const res = await fetch("/api/sessions");
+        const data = await res.json();
+        if (data?.activeSession) setClassActive(true);
+      } catch {
+        /* sin sesión de clase */
+      }
+    }
+    checkClassSession();
   }, []);
 
   async function handleLogin(e: React.FormEvent) {
@@ -37,12 +45,12 @@ export default function LoginPage() {
         const res = await fetch("/api/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: trimmed }),
+          body: JSON.stringify({ code: trimmed, password }),
         });
         const data = await res.json();
 
         if (!res.ok) {
-          setError(data.error ?? "Código de docente no reconocido.");
+          setError(data.error ?? "Código o contraseña incorrectos.");
           return;
         }
 
@@ -143,7 +151,7 @@ export default function LoginPage() {
             id="codeInput"
             type="text"
             className="login-input"
-            placeholder="ej: G2-014 o PROF-001"
+            placeholder="Pega tu código tal como te lo dieron"
             value={code}
             onChange={(e) => {
               setCode(e.target.value);
@@ -154,6 +162,21 @@ export default function LoginPage() {
             spellCheck={false}
             disabled={loading}
           />
+
+          {codeIsTeacher && (
+            <>
+              <label className="login-label" htmlFor="passwordInput" style={{ marginTop: 14 }}>Contraseña</label>
+              <input
+                id="passwordInput"
+                type="password"
+                className="login-input"
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); setError(null); }}
+                autoComplete="current-password"
+                disabled={loading}
+              />
+            </>
+          )}
 
           {codeIsTeacher && !error && (
             <div style={{ fontSize: "0.82rem", color: "var(--text-dim)", marginTop: "6px" }}>
@@ -166,7 +189,7 @@ export default function LoginPage() {
           <button
             type="submit"
             className="login-btn"
-            disabled={loading || !code.trim()}
+            disabled={loading || !code.trim() || (codeIsTeacher && !password)}
           >
             {loading ? (
               <>
@@ -181,8 +204,7 @@ export default function LoginPage() {
         </form>
 
         <p className="login-hint">
-          Estudiantes: <code>G1-001</code>, <code>G2-014</code>, <code>G3-032</code>.<br />
-          Docentes: <code>PROF-001</code>.
+          Copia y pega tu código tal cual. Si no funciona, pídele uno nuevo a tu docente.
         </p>
       </div>
     </div>

@@ -17,14 +17,13 @@ export default function ThreadMap({ masteredNodes, reviewNode, currentNodeId, on
         const isMastered = masteredNodes.has(key);
         const isCurrent = key === currentNodeId && reviewNode === null;
         const isReview = key === reviewNode;
-        const prereqsMet = (n.prereqs ?? []).every(p => masteredNodes.has(p));
-        const isAccessible = isMastered || prereqsMet || isCurrent;
+        // Estudio libre: todos los temas son accesibles; los prerrequisitos son solo una recomendación.
+        const isAccessible = true;
 
         let cls = "node";
         if (isMastered) cls += " mastered";
         else if (isCurrent) cls += " current";
         if (isReview) cls += " review";
-        if (!isAccessible && !isCurrent) cls += " locked";
 
         const canClick = isAccessible && onNodeClick && key !== currentNodeId;
 
@@ -32,7 +31,7 @@ export default function ThreadMap({ masteredNodes, reviewNode, currentNodeId, on
           <span key={key} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             <span
               className={cls}
-              title={isAccessible ? n.unit : `Requiere: ${n.prereqs.map(p => DAG[p]?.label).join(", ")}`}
+              title={n.prereqs.length > 0 ? `${n.unit} · Recomendado antes: ${n.prereqs.map(p => DAG[p]?.label).join(", ")}` : n.unit}
               onClick={canClick ? () => onNodeClick(key) : undefined}
               style={{ cursor: canClick ? "pointer" : "default" }}
             >

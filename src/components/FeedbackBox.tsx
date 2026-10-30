@@ -2,6 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
+import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 
 interface FeedbackBoxProps {
@@ -25,7 +26,7 @@ export default function FeedbackBox({ state, tag, text, loading, onAction }: Fee
           </p>
         ) : (
           <ReactMarkdown
-            remarkPlugins={[remarkMath]}
+            remarkPlugins={[remarkMath, remarkGfm]}
             rehypePlugins={[rehypeKatex]}
           >
             {text}

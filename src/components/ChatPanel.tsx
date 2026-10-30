@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
+import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 
 interface Message {
@@ -55,10 +56,12 @@ export default function ChatPanel({ currentNode, currentNodeLabel, currentExerci
           currentNode,
           currentNodeLabel,
           currentExercise,
-          groupId,
-          studentId,
         }),
       });
+      if (res.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
       const data = await res.json();
       setMessages([...nextMessages, { role: "assistant", content: data.reply ?? "Sin respuesta." }]);
     } catch {
@@ -82,14 +85,14 @@ export default function ChatPanel({ currentNode, currentNodeLabel, currentExerci
 
       {open && (
         <div className="chat-panel">
-          <div className="chat-header">
+          <div className="chat-panel-header">
             <div>
               <strong>Ariadna</strong> · Dudas
               <div style={{ fontSize: "0.6rem", textTransform: "uppercase", letterSpacing: 1, opacity: 0.8 }}>
                 {currentNodeLabel}
               </div>
             </div>
-            <button className="chat-close" onClick={onToggle}>✕</button>
+            <button className="chat-panel-close" onClick={onToggle} aria-label="Cerrar chat">✕</button>
           </div>
 
           <div className="chat-messages">
@@ -101,7 +104,7 @@ export default function ChatPanel({ currentNode, currentNodeLabel, currentExerci
             )}
             {messages.map((m, i) => (
               <div key={i} className={`chat-bubble chat-bubble-${m.role}`}>
-                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
                   {m.content}
                 </ReactMarkdown>
               </div>

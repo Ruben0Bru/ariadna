@@ -2,6 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
+import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import type { NodeConcept } from "@/lib/dag";
 
@@ -23,14 +24,14 @@ export default function ConceptCard({ nodeId, concept, onStart }: ConceptCardPro
       <h2 className="concept-title">{concept.title}</h2>
 
       <div className="concept-body">
-        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+        <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
           {concept.body}
         </ReactMarkdown>
       </div>
 
       <div className="concept-example">
         <div className="concept-example-label">Ejemplo resuelto</div>
-        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+        <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
           {concept.example}
         </ReactMarkdown>
       </div>

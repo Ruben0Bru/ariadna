@@ -1,120 +1,137 @@
 // src/app/api/login/route.ts
-// Registra / recupera al estudiante o docente por código (RF-14).
+// Acceso por código (RF-14).
+//  - Estudiantes: el código debe estar PRE-REGISTRADO en la tabla students y activo.
+//    Esta ruta ya NO crea estudiantes.
+//  - Docentes: código existente en teachers + contraseña (hash bcrypt de pgcrypto).
+// Al entrar emite una cookie httpOnly firmada; el servidor deja de confiar en el
+// studentId que mande el navegador.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { inferGroupFromCode } from "@/lib/utils";
-
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+import bcrypt from "bcryptjs";
+import { getServerSupabaseConfig, setAuthCookie } from "@/lib/auth";
 
 function isTeacherCode(code: string): boolean {
   return code.startsWith("PROF-");
 }
 
+// ── Límite de intentos fallidos de docente (en memoria) ──────────────────────
+// Nota: en serverless cada instancia tiene su propia memoria, así que es una
+// protección básica, no absoluta.
+const MAX_FAILS = 5;
+const LOCK_MS = 15 * 60 * 1000;
+const fails = new Map<string, { count: number; lockedUntil: number }>();
+
+function lockKey(req: NextRequest, code: string): string {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  return `${ip}|${code}`;
+}
+
+function isLocked(key: string): boolean {
+  const f = fails.get(key);
+  return !!f && f.lockedUntil > Date.now();
+}
+
+function registerFail(key: string): void {
+  const f = fails.get(key) ?? { count: 0, lockedUntil: 0 };
+  f.count += 1;
+  if (f.count >= MAX_FAILS) {
+    f.lockedUntil = Date.now() + LOCK_MS;
+    f.count = 0;
+  }
+  fails.set(key, f);
+}
+
 export async function POST(req: NextRequest) {
   let code: string;
+  let password = "";
   try {
     const body = await req.json();
     code = (body.code ?? "").trim().toUpperCase();
+    password = typeof body.password === "string" ? body.password : "";
   } catch {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
-  if (!code || code.length < 4) {
+  if (!code || code.length < 4 || code.length > 40) {
+    return NextResponse.json({ error: "Código no válido" }, { status: 400 });
+  }
+
+  const cfg = getServerSupabaseConfig();
+  if (!cfg) {
     return NextResponse.json(
-      { error: "Código inválido. Debe tener al menos 4 caracteres." },
-      { status: 400 }
+      { error: "Servidor sin configurar (falta SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY)." },
+      { status: 500 }
     );
   }
+  const supabase = createClient(cfg.url, cfg.key);
 
   // ── Flujo de docente ────────────────────────────────────────────────────────
-  // Accept any PROF-* code — the teachers table is optional.
-  // If the table doesn't exist or the code isn't registered, still allow login
-  // as the teacher dashboard only needs a session identifier.
   if (isTeacherCode(code)) {
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ teacherId: code, name: `Docente (${code})`, offline: true });
+    const key = lockKey(req, code);
+    if (isLocked(key)) {
+      return NextResponse.json(
+        { error: "Demasiados intentos. Espera 15 minutos e inténtalo de nuevo." },
+        { status: 429 }
+      );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data: teacher, error } = await supabase
+      .from("teachers")
+      .select("id, name, password_hash")
+      .eq("code", code)
+      .maybeSingle();
 
-    // Try to look up the teacher — but treat ANY error as "accept with offline mode"
-    // because the teachers table may not exist in all environments.
-    try {
-      const { data, error } = await supabase
-        .from("teachers")
-        .select("id, name")
-        .eq("code", code)
-        .maybeSingle();
-
-      // If query succeeded and we found a record, return it
-      if (!error && data) {
-        return NextResponse.json({ teacherId: data.id, name: data.name });
-      }
-
-      // If query succeeded but no record, still accept the code (open registration)
-      if (!error && !data) {
-        return NextResponse.json({ teacherId: code, name: `Docente (${code})` });
-      }
-
-      // For any DB error (including PGRST125 = table not found), accept gracefully
-      console.warn("[Ariadna/login] No se pudo consultar tabla teachers (puede no existir):", error?.message);
-      return NextResponse.json({ teacherId: code, name: `Docente (${code})`, offline: true });
-    } catch (e) {
-      console.warn("[Ariadna/login] Excepción al buscar docente:", e);
-      return NextResponse.json({ teacherId: code, name: `Docente (${code})`, offline: true });
+    if (error) {
+      console.error("[login] error leyendo teachers:", error.message);
+      return NextResponse.json({ error: "Error al consultar la base de datos." }, { status: 500 });
     }
+
+    let ok = false;
+    if (teacher?.password_hash && password) {
+      try {
+        ok = await bcrypt.compare(password, teacher.password_hash);
+      } catch {
+        ok = false;
+      }
+    }
+
+    if (!teacher || !ok) {
+      registerFail(key);
+      return NextResponse.json({ error: "Código o contraseña incorrectos." }, { status: 401 });
+    }
+
+    fails.delete(key);
+    const res = NextResponse.json({ teacherId: teacher.id, name: teacher.name });
+    if (!setAuthCookie(res, "teacher", { id: teacher.id })) {
+      return NextResponse.json({ error: "No hay clave de firma configurada en el servidor." }, { status: 500 });
+    }
+    return res;
   }
 
-  // ── Flujo de estudiante ─────────────────────────────────────────────────────
-  const groupId = inferGroupFromCode(code);
-
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ studentId: code, groupId, masteredNodes: [], offline: true });
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
-  const { data: existing, error: selectError } = await supabase
+  // ── Flujo de estudiante: SOLO códigos pre-registrados ───────────────────────
+  const { data: student, error: selectError } = await supabase
     .from("students")
-    .select("id, group_id, mastered_nodes")
+    .select("id, group_id, mastered_nodes, active")
     .eq("code", code)
     .maybeSingle();
 
   if (selectError) {
-    console.error("[Ariadna/login] Error en lectura de estudiante:", selectError);
-    return NextResponse.json(
-      { error: `Error DB en lectura: ${selectError.message}. Verifica que la tabla students exista.` },
-      { status: 500 }
-    );
+    console.error("[login] error leyendo students:", selectError.message);
+    return NextResponse.json({ error: "Error al consultar la base de datos." }, { status: 500 });
   }
 
-  let studentId: string;
-  let resolvedGroupId: number;
-  let masteredNodes: string[] = [];
-
-  if (existing) {
-    studentId = existing.id;
-    resolvedGroupId = existing.group_id;
-    masteredNodes = existing.mastered_nodes ?? [];
-  } else {
-    const { data: created, error } = await supabase
-      .from("students")
-      .insert({ code, group_id: groupId })
-      .select("id, group_id")
-      .single();
-
-    if (error || !created) {
-      console.error("[Ariadna/login] Error al crear estudiante:", error);
-      return NextResponse.json(
-        { error: `Error DB insert: ${error?.message ?? "Desconocido"}` },
-        { status: 500 }
-      );
-    }
-    studentId = created.id;
-    resolvedGroupId = created.group_id;
+  if (!student || student.active === false) {
+    return NextResponse.json({ error: "Código no válido. Revisa que lo hayas copiado igual." }, { status: 401 });
   }
 
-  return NextResponse.json({ studentId, groupId: resolvedGroupId, masteredNodes });
+  const res = NextResponse.json({
+    studentId: student.id,
+    groupId: student.group_id,
+    masteredNodes: student.mastered_nodes ?? [],
+  });
+  if (!setAuthCookie(res, "student", { id: student.id, groupId: student.group_id })) {
+    return NextResponse.json({ error: "No hay clave de firma configurada en el servidor." }, { status: 500 });
+  }
+  return res;
 }

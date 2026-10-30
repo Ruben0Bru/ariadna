@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { EXERCISES } from "@/lib/dag";
-
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+import { getTeacherAuth, getAnyAuth, getServerSupabaseConfig } from "@/lib/auth";
 
 // Map local exercise format to the DB format the client expects
 function localToDbFormat(ex: typeof EXERCISES[number]) {
@@ -23,14 +21,20 @@ function localToDbFormat(ex: typeof EXERCISES[number]) {
  * Returns all exercises from Supabase if available, or falls back to the
  * local hardcoded bank (lib/dag.ts EXERCISES) so students are NEVER blocked.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // Solo usuarios con sesión (estudiante o docente) pueden leer el banco.
+  if (!getAnyAuth(req)) {
+    return NextResponse.json({ error: "Sesión requerida", authRequired: true }, { status: 401 });
+  }
+
+  const cfg = getServerSupabaseConfig();
   // If no DB configured at all, serve local bank immediately
-  if (!supabaseUrl || !supabaseKey) {
+  if (!cfg) {
     console.log("[exercises] No DB config — serving local exercise bank");
     return NextResponse.json({ exercises: EXERCISES.map(localToDbFormat), source: "local" });
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = createClient(cfg.url, cfg.key);
 
   try {
     const { data, error } = await supabase
@@ -59,11 +63,15 @@ export async function GET() {
 
 // Create a new custom exercise (teacher use only)
 export async function POST(req: NextRequest) {
-  if (!supabaseUrl || !supabaseKey) {
+  if (!getTeacherAuth(req)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+  const cfg = getServerSupabaseConfig();
+  if (!cfg) {
     return NextResponse.json({ error: "No DB configuration" }, { status: 500 });
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = createClient(cfg.url, cfg.key);
 
   try {
     const { node_id, prompt, correct_expr } = await req.json();
@@ -76,8 +84,7 @@ export async function POST(req: NextRequest) {
       node_id,
       prompt,
       correct_expr,
-      variable: "x",
-      exercise_type: "algebraic"
+      variable: "x"
     }).select().single();
 
     if (error) throw error;

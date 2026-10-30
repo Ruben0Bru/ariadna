@@ -1,35 +1,53 @@
 // src/app/api/verify/route.ts
+// Verificación matemática (motor numérico math.js) + registro del intento.
+// Cambios clave:
+//  - La identidad del estudiante sale de la COOKIE firmada, no del body.
+//  - Todos los inserts/updates se esperan (await) con reintento: nada se pierde.
+//  - El nodo se marca dominado en el servidor solo con 3 aciertos consecutivos.
+
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { evaluate } from "mathjs";
 import { EXERCISES } from "@/lib/dag";
+import { getStudentAuth, getServerSupabaseConfig } from "@/lib/auth";
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const MASTERY_THRESHOLD = 3;
+const MAX_ANSWER_LENGTH = 200;
+
+// Puntos de prueba: se usan solo los que son reales en AMBAS expresiones, así
+// ln(x-3), sqrt(x) o similares también se pueden comparar.
+const TEST_POINTS = [1.3, -0.7, 2.9, -2.1, 0.05, 4.7, 0.6, 1.9, 3.3, 5.5, -3.4, 7.1];
 
 interface VerifyBody {
-  studentId: string;
   exerciseId: number;
   studentAnswer: string;
-  groupId?: number;
 }
 
+// Funciones de math.js que un estudiante nunca necesita y que no queremos evaluar.
+const FORBIDDEN = /\b(import|createUnit|evaluate|parse|compile|simplify|derivative|rationalize|resolve|chain|reviver|typed|config|help|function)\b/i;
+
 function toMathjs(expr: string): string {
-  let processed = expr
-    .replace(/\*\*/g, "^")
-    .replace(/sqrt\(/g, "sqrt(")
-    .trim();
+  let p = expr.trim();
 
-  // If the user typed LaTeX fraction \frac{a}{b}, attempt basic conversion to (a)/(b)
-  // This is a safety net since MathPreview displays LaTeX
-  processed = processed.replace(/\\frac{([^{}]+)}{([^{}]+)}/g, "($1)/($2)");
-  
-  // Strip any remaining backslashes (e.g. \cdot)
-  processed = processed.replace(/\\cdott/g, "*");
-  processed = processed.replace(/\\cdot/g, "*");
-  processed = processed.replace(/\\/g, "");
+  // Unicode habitual al escribir/pegar matemáticas
+  p = p
+    .replace(/[−–—]/g, "-")
+    .replace(/[·×⋅]/g, "*")
+    .replace(/÷/g, "/")
+    .replace(/²/g, "^2")
+    .replace(/³/g, "^3");
 
-  return processed;
+  p = p.replace(/\*\*/g, "^");
+
+  // LaTeX básico: \frac{a}{b} y \cdot
+  p = p.replace(/\\frac{([^{}]+)}{([^{}]+)}/g, "($1)/($2)");
+  p = p.replace(/\\cdot/g, "*");
+  p = p.replace(/\\/g, "");
+
+  // Notación en español / alias frecuentes
+  p = p.replace(/\bsen\(/gi, "sin(").replace(/\btg\(/gi, "tan(").replace(/\bln\(/gi, "log(");
+
+  return p;
 }
 
 function evalAt(expr: string, val: number, variable: string = "x"): number | null {
@@ -46,10 +64,9 @@ function evalAt(expr: string, val: number, variable: string = "x"): number | nul
 }
 
 function numericallyEqual(expr1: string, expr2: string, variable: string = "x"): boolean {
-  const points = [1.3, -0.7, 2.9, -2.1, 0.05];
   let passed = 0;
   let tried = 0;
-  for (const pt of points) {
+  for (const pt of TEST_POINTS) {
     const v1 = evalAt(expr1, pt, variable);
     const v2 = evalAt(expr2, pt, variable);
     if (v1 === null || v2 === null) continue;
@@ -77,29 +94,87 @@ function classifyError(studentExpr: string, expectedExpr: string, originalExpr: 
   return "desconocido";
 }
 
+// Ejecuta una operación de Supabase y la reintenta una vez si falla.
+type SbResult = { error: { message: string } | null; data?: any };
+
+async function withRetry<T extends SbResult>(
+  label: string,
+  op: () => PromiseLike<T>
+): Promise<T> {
+  let res = await op();
+  if (res.error) {
+    console.error(`[verify] ${label} falló, reintentando:`, res.error.message);
+    res = await op();
+    if (res.error) console.error(`[verify] ${label} falló de nuevo:`, res.error.message);
+  }
+  return res;
+}
+
+// Marca el nodo como dominado si los últimos N intentos en ese nodo son correctos.
+async function updateMastery(supabase: SupabaseClient, studentId: string, nodeId: string): Promise<boolean> {
+  const { data: recent, error } = await supabase
+    .from("attempts")
+    .select("is_correct")
+    .eq("student_id", studentId)
+    .eq("node_id", nodeId)
+    .order("id", { ascending: false })
+    .limit(MASTERY_THRESHOLD);
+
+  if (error || !recent || recent.length < MASTERY_THRESHOLD) return false;
+  if (!recent.every(r => r.is_correct === true)) return false;
+
+  const { data: sData } = await supabase
+    .from("students")
+    .select("mastered_nodes")
+    .eq("id", studentId)
+    .single();
+
+  const current: string[] = sData?.mastered_nodes ?? [];
+  if (current.includes(nodeId)) return true;
+
+  await withRetry("update mastered_nodes", () =>
+    supabase.from("students").update({ mastered_nodes: [...current, nodeId] }).eq("id", studentId)
+  );
+  return true;
+}
+
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();
+
+  const auth = getStudentAuth(req);
+  if (!auth) {
+    return NextResponse.json(
+      { error: "Tu sesión expiró. Vuelve a ingresar con tu código.", authRequired: true },
+      { status: 401 }
+    );
+  }
+  const studentId = auth.id;
+  const groupId = auth.groupId ?? null;
+
   let body: VerifyBody;
-  
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
-  const { studentId, exerciseId, studentAnswer, groupId } = body;
+  const exerciseId = Number(body.exerciseId);
+  const studentAnswer = typeof body.studentAnswer === "string" ? body.studentAnswer.trim() : "";
 
-  if (!studentId || !exerciseId || !studentAnswer?.trim()) {
+  if (!exerciseId || !studentAnswer) {
     return NextResponse.json({ error: "Faltan campos requeridos." }, { status: 400 });
   }
-
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: "BD no configurada." }, { status: 500 });
+  if (studentAnswer.length > MAX_ANSWER_LENGTH) {
+    return NextResponse.json({ error: "La respuesta es demasiado larga." }, { status: 400 });
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const cfg = getServerSupabaseConfig();
+  if (!cfg) {
+    return NextResponse.json({ error: "BD no configurada en el servidor." }, { status: 500 });
+  }
+  const supabase = createClient(cfg.url, cfg.key);
 
-  // FETCH EXERCISE — try DB first, fall back to local bank
+  // FETCH EXERCISE — primero la BD; si no está, el banco local
   let ex: { node_id: string; correct_expr: string; variable: string; prereq_on_fail: string | null; fail_reason: string | null } | null = null;
 
   const { data: dbEx, error: exError } = await supabase
@@ -111,7 +186,6 @@ export async function POST(req: NextRequest) {
   if (!exError && dbEx) {
     ex = dbEx;
   } else {
-    // Fall back to local hardcoded bank
     const localEx = EXERCISES.find(e => e.id === exerciseId);
     if (localEx) {
       ex = {
@@ -133,68 +207,65 @@ export async function POST(req: NextRequest) {
   const studentExprMathjs = toMathjs(studentAnswer);
 
   let isCorrect = false;
-  let fallbackSyntaxError = false;
   let errorType: string | null = null;
-  
-  let evalTest = evalAt(studentExprMathjs, 1.0, variable);
-  
+
+  const evalTest = FORBIDDEN.test(studentAnswer) ? null : evalAt(studentExprMathjs, 1.0, variable);
+
   if (evalTest === null) {
-    fallbackSyntaxError = true;
-    errorType = "syntax";
+    // No se pudo evaluar (sintaxis o dominio en x=1): se intenta con otros puntos
+    // antes de declarar error de sintaxis.
+    const evaluableElsewhere =
+      !FORBIDDEN.test(studentAnswer) &&
+      TEST_POINTS.some(pt => evalAt(studentExprMathjs, pt, variable) !== null);
+    if (!evaluableElsewhere) {
+      errorType = "syntax";
+    } else {
+      isCorrect = numericallyEqual(studentExprMathjs, expectedExprMathjs, variable);
+      if (!isCorrect) {
+        errorType = classifyError(studentExprMathjs, expectedExprMathjs, toMathjs(ex.correct_expr), variable);
+      }
+    }
   } else {
     isCorrect = numericallyEqual(studentExprMathjs, expectedExprMathjs, variable);
     if (!isCorrect) {
-       errorType = classifyError(studentExprMathjs, expectedExprMathjs, toMathjs(ex.correct_expr), variable);
+      errorType = classifyError(studentExprMathjs, expectedExprMathjs, toMathjs(ex.correct_expr), variable);
     }
   }
 
   const prereqSuggested = isCorrect ? null : (ex.prereq_on_fail || null);
 
-  // LOG ATTEMPT
-  let attemptId: number | null = null;
+  // ── REGISTRO DEL INTENTO (con await y reintento) ──────────────────────────
+  const attemptRow = {
+    student_id: studentId,
+    exercise_id: exerciseId,
+    node_id: ex.node_id,
+    student_answer: studentAnswer,
+    is_correct: isCorrect,
+    error_type: errorType,
+    prereq_suggested: prereqSuggested,
+    response_time_ms: Date.now() - startedAt,
+    group_id: groupId,
+  };
 
-  if (isCorrect) {
-    // Update mastered_nodes directly (no RPC dependency)
-    supabase.from("students")
-      .select("mastered_nodes")
-      .eq("id", studentId)
-      .single()
-      .then(({ data: sData }) => {
-        if (!sData) return;
-        const current: string[] = sData.mastered_nodes ?? [];
-        if (!current.includes(ex.node_id)) {
-          supabase.from("students")
-            .update({ mastered_nodes: [...current, ex.node_id] })
-            .eq("id", studentId)
-            .then();
-        }
-      });
+  const attemptRes = await withRetry("insert attempt", () =>
+    supabase.from("attempts").insert(attemptRow).select("id").maybeSingle()
+  );
+  const attemptId: number | null = attemptRes.data?.id ?? null;
+  const logged = !attemptRes.error;
+
+  // ── DOMINIO DE NODO (solo servidor): 3 aciertos consecutivos ──────────────
+  let mastered = false;
+  if (isCorrect && logged) {
+    mastered = await updateMastery(supabase, studentId, ex.node_id);
   }
-
-
-  const { data: attemptData } = await supabase
-    .from("attempts")
-    .insert({
-      student_id: studentId,
-      exercise_id: exerciseId,
-      node_id: ex.node_id,
-      student_answer: studentAnswer,
-      is_correct: isCorrect,
-      error_type: errorType,
-      prereq_suggested: prereqSuggested,
-      response_time_ms: Date.now() - startedAt,
-      group_id: groupId ?? null,
-    })
-    .select("id")
-    .maybeSingle();
-
-  if (attemptData) attemptId = attemptData.id;
 
   return NextResponse.json({
     correct: isCorrect,
-    errorType: fallbackSyntaxError ? "syntax" : (isCorrect ? null : "algebraic"), // frontend fallback support
+    errorType: isCorrect ? null : errorType,
     prereqSuggested,
     failReason: isCorrect ? null : ex.fail_reason,
     attemptId,
+    mastered,
+    logged,
   });
 }

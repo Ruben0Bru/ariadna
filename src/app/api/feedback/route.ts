@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { getAnyAuth, getServerSupabaseConfig } from "@/lib/auth";
 
 // ── Módulo de mediación pedagógica: proxy seguro hacia Gemini (RF-11, RF-12) ──
 // La API key NUNCA se expone al cliente.
@@ -28,6 +30,7 @@ function buildPrompt(body: FeedbackBody): string {
     signo: "error de signo en la derivada",
     constante: "olvidó que la derivada de un término constante es cero",
     desconocido: "error no clasificado automáticamente",
+    syntax: "la expresión no se pudo interpretar (revisar paréntesis, operadores o la notación)",
   };
   const errorDesc = errorType ? (errorTypeLabel[errorType] ?? errorType) : null;
 
@@ -86,20 +89,45 @@ ${levelInstructions[level]}
 
 
 
+// Guarda el texto que generó el LLM en el intento (con await y un reintento).
+async function saveFeedback(studentId: string, attemptId: number | null | undefined, message: string) {
+  const cfg = getServerSupabaseConfig();
+  if (!cfg || !attemptId) return;
+  try {
+    const sb = createClient(cfg.url, cfg.key);
+    const run = () =>
+      sb.from("attempts").update({ llm_feedback: message }).eq("id", attemptId).eq("student_id", studentId);
+    let { error } = await run();
+    if (error) ({ error } = await run());
+    if (error) console.error("[feedback] no se pudo guardar llm_feedback:", error.message);
+  } catch (e) {
+    console.error("[feedback] excepción al guardar llm_feedback:", e);
+  }
+}
+
 export async function POST(req: NextRequest) {
+  const auth = getAnyAuth(req);
+  if (!auth) {
+    return NextResponse.json(
+      { error: "Tu sesión expiró. Vuelve a ingresar con tu código.", authRequired: true },
+      { status: 401 }
+    );
+  }
+
   let body: FeedbackBody;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
+  const studentId = auth.role === "student" ? auth.id : null;
 
   const apiKey = process.env.GEMINI_API_KEY;
 
   // Fallback estático si no hay key configurada — texto pedagógico útil sin Gemini
   if (!apiKey) {
     const fallback = body.correct
-      ? "¡Muy bien! Tu derivada es correcta — puedes avanzar al siguiente nodo del grafo."
+      ? "¡Muy bien! Tu derivada es correcta — sigue con el siguiente ejercicio."
       : `Tu respuesta aún no es correcta. El motor simbólico detectó una posible dificultad con: ${body.exercise.failReason}. Te recomiendo repasar el nodo "${body.targetNodeLabel}" (${body.targetNodeUnit}) y volver a intentarlo — entender ese prerrequisito es clave para este tipo de ejercicio.`;
     return NextResponse.json({ message: fallback });
   }
@@ -119,12 +147,6 @@ export async function POST(req: NextRequest) {
             temperature: 0.4,
             topP: 0.9,
           },
-          safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT",        threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH",       threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-          ],
         }),
       }
     );
@@ -144,11 +166,12 @@ export async function POST(req: NextRequest) {
 
     if (!message) throw new Error("Gemini devolvió respuesta vacía");
 
+    if (studentId) await saveFeedback(studentId, body.attemptId, message);
     return NextResponse.json({ message });
   } catch (e) {
     console.error("[Ariadna/feedback] Error:", e);
     const fallback = body.correct
-      ? "¡Muy bien! Tu derivada es correcta — puedes avanzar al siguiente nodo del grafo."
+      ? "¡Muy bien! Tu derivada es correcta — sigue con el siguiente ejercicio."
       : `Tu respuesta aún no es correcta. Revisa el prerrequisito: ${body.exercise.failReason}. Visita el nodo "${body.targetNodeLabel}" antes de reintentar.`;
     return NextResponse.json({ message: fallback });
   }

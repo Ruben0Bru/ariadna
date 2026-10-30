@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getTeacherAuth, getServerSupabaseConfig } from "@/lib/auth";
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
+// GET es público a propósito: lo usa la pantalla de login y la app del estudiante
+// para saber si hay una sesión de clase activa. Solo devuelve ids de ejercicios.
 export async function GET() {
-  if (!supabaseUrl || !supabaseKey) {
+  const cfg = getServerSupabaseConfig();
+  if (!cfg) {
     return NextResponse.json({ error: "Falta DB" }, { status: 500 });
   }
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = createClient(cfg.url, cfg.key);
   const { data } = await supabase
     .from("class_sessions")
     .select("exercise_ids")
@@ -21,13 +22,17 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!supabaseUrl || !supabaseKey) {
+  if (!getTeacherAuth(req)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+  const cfg = getServerSupabaseConfig();
+  if (!cfg) {
     return NextResponse.json({ error: "Falta configuración de DB" }, { status: 500 });
   }
 
   try {
     const { action, exerciseIds, teacherCode } = await req.json();
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(cfg.url, cfg.key);
 
     if (action === "deactivate") {
       await supabase.from("class_sessions").update({ active: false }).eq("active", true);

@@ -1,16 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { DAG, EXERCISES } from "@/lib/dag";
+import { getTeacherAuth, getServerSupabaseConfig } from "@/lib/auth";
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-export async function POST() {
-  if (!supabaseUrl || !supabaseKey) {
+export async function POST(req: NextRequest) {
+  if (!getTeacherAuth(req)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+  const cfg = getServerSupabaseConfig();
+  if (!cfg) {
     return NextResponse.json({ error: "Falta configuración de DB" }, { status: 500 });
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = createClient(cfg.url, cfg.key);
 
   try {
     // 1. Sembrar Nodos
