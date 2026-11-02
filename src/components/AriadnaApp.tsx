@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { DAG, DAG_ORDER, CONCEPTS, DEFAULT_NODE, type Exercise } from "@/lib/dag";
 import { getSession, clearSession, saveSession, type StudentSession } from "@/lib/session";
+import PromptText from "./PromptText";
 import ThreadMap from "@/components/ThreadMap";
 import FeedbackBox from "@/components/FeedbackBox";
 import ConceptCard from "@/components/ConceptCard";
@@ -11,6 +12,24 @@ import ChatPanel from "@/components/ChatPanel";
 import MathPreview from "@/components/MathPreview";
 
 type FeedbackState = "hidden" | "ok" | "warn";
+
+// Fragmentos de LaTeX para la barra de símbolos: "caret" = dónde queda el cursor.
+const LATEX_SNIPPETS: { label: string; insert: string; caret: number }[] = [
+  { label: "a/b", insert: "\\frac{}{}", caret: 6 },
+  { label: "√", insert: "\\sqrt{}", caret: 6 },
+  { label: "xⁿ", insert: "^{}", caret: 2 },
+  { label: "sen", insert: "\\sin ", caret: 5 },
+  { label: "cos", insert: "\\cos ", caret: 5 },
+  { label: "tan", insert: "\\tan ", caret: 5 },
+  { label: "sec", insert: "\\sec ", caret: 5 },
+  { label: "csc", insert: "\\csc ", caret: 5 },
+  { label: "cot", insert: "\\cot ", caret: 5 },
+  { label: "ln", insert: "\\ln ", caret: 4 },
+  { label: "eˣ", insert: "e^{}", caret: 3 },
+  { label: "θ", insert: "\\theta ", caret: 7 },
+  { label: "( )", insert: "\\left(\\right)", caret: 6 },
+  { label: "·", insert: "\\cdot ", caret: 6 },
+];
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -161,7 +180,8 @@ export default function AriadnaApp() {
       pool = allExercises.filter(e => e.node === activeNode);
     }
 
-    setExercises(shuffle(pool));
+    // Orden fijo por id: así se sigue la numeración de la lista del profesor.
+    setExercises([...pool].sort((a, b) => a.id - b.id));
     setConsecutiveCorrect(0);
     setJustMastered(false);
 
@@ -350,6 +370,21 @@ export default function AriadnaApp() {
     setFeedbackState("ok");
     setFeedbackTag("✓ AVANCE FORZADO");
     setFeedbackText(`La respuesta esperada era: ${ex?.expr}.`);
+  }
+
+  // Inserta un fragmento LaTeX en la posición del cursor de la caja de respuesta.
+  function insertSnippet(snippet: string, caret: number) {
+    const el = inputRef.current;
+    const start = el?.selectionStart ?? inputValue.length;
+    const end = el?.selectionEnd ?? inputValue.length;
+    const next = inputValue.slice(0, start) + snippet + inputValue.slice(end);
+    setInputValue(next);
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const pos = start + caret;
+      el.setSelectionRange(pos, pos);
+    });
   }
 
   async function handleLogout() {
@@ -712,11 +747,13 @@ export default function AriadnaApp() {
         </div>
 
         <div className="problem" id="problemText">
-          <span className="fn">{ex?.prompt}</span>
+          <span className="fn"><PromptText text={ex?.prompt ?? ""} /></span>
         </div>
 
         <div className="notation-hint">
-          💡 Usa <code>*</code> para multiplicar y <code>^</code> para exponentes — ej: <code>3*x^2 - 6*x</code>
+          💡 Escribe tu respuesta en <strong>LaTeX</strong>; la vista previa te muestra cómo se ve. Ej:{" "}
+          <code>{"\\frac{3}{4}x^{-1/4}"}</code>, <code>{"6x^{2}+\\sin x"}</code>, <code>{"\\sec\\theta\\tan\\theta"}</code>.
+          Los botones te ayudan a escribirlo.
         </div>
 
         <div className="input-row">
@@ -724,7 +761,7 @@ export default function AriadnaApp() {
             ref={inputRef}
             type="text"
             id="answerInput"
-            placeholder="Escribe tu respuesta aquí…"
+            placeholder="Escribe tu respuesta en LaTeX…"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -743,6 +780,22 @@ export default function AriadnaApp() {
               {checking ? "Verificando…" : "Verificar →"}
             </button>
           )}
+        </div>
+
+        {/* ── Barra de símbolos LaTeX ── */}
+        <div className="latex-toolbar" aria-label="Símbolos LaTeX">
+          {LATEX_SNIPPETS.map((sn) => (
+            <button
+              key={sn.label}
+              type="button"
+              className="latex-btn"
+              title={sn.insert}
+              disabled={checking || feedbackState === "ok"}
+              onClick={() => insertSnippet(sn.insert, sn.caret)}
+            >
+              {sn.label}
+            </button>
+          ))}
         </div>
 
         {/* ── Live math formula preview ── */}

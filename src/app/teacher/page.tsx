@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { getTeacherSession, clearTeacherSession } from "@/lib/session";
 import { DAG, DAG_ORDER, EXERCISES } from "@/lib/dag";
+import PromptText from "@/components/PromptText";
+import MathPreview from "@/components/MathPreview";
 
 interface StudentStat {
   student_id: string;
@@ -417,7 +419,7 @@ export default function TeacherDashboard() {
                     />
                   <div>
                       <div style={{ color: "var(--text-main)", fontSize: "0.95rem", marginBottom: "4px" }}>
-                         {ex.prompt}
+                         <PromptText text={ex.prompt} />
                       </div>
                       <div style={{ color: "var(--text-dim)", fontSize: "0.78rem", fontFamily: "'JetBrains Mono', monospace" }}>
                         Respuesta: {ex.correct_expr} · ID #{ex.id}
@@ -489,7 +491,7 @@ export default function TeacherDashboard() {
                     <td style={{ padding: "14px 16px", color: "var(--text-dim)" }}>#{ex.id}</td>
                     <td style={{ padding: "14px 16px", color: "var(--thread)" }}>{ex.node_id}</td>
                     <td style={{ padding: "14px 16px", color: "var(--text)", fontSize: "0.9rem" }}>
-                      {ex.prompt}
+                      <PromptText text={ex.prompt} />
                       <br/>
                       <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "0.8rem", color: "var(--text-dim)" }}>{ex.correct_expr}</span>
                     </td>
@@ -517,7 +519,7 @@ export default function TeacherDashboard() {
               </select>
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.9rem", color: "var(--text-dim)" }}>
-              Enunciado (ej. "Deriva f(x) = x^2")
+              {"Enunciado — usa $...$ para las fórmulas (ej. Deriva $f(x)=\\frac{x^{2}}{3}$)"}
               <input 
                 type="text"
                 value={newExPrompt} 
@@ -525,16 +527,22 @@ export default function TeacherDashboard() {
                 placeholder="Escribe el enunciado para el estudiante..."
                 style={{ padding: "10px", borderRadius: "8px", background: "var(--panel)", border: "1px solid var(--line)", color: "var(--text)" }}
               />
+              {newExPrompt.trim() && (
+                <div style={{ padding: "10px 12px", borderRadius: "8px", border: "1px dashed var(--line)", color: "var(--text)" }}>
+                  <PromptText text={newExPrompt} />
+                </div>
+              )}
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.9rem", color: "var(--text-dim)" }}>
-              Respuesta Matemática Correcta (ej. "2*x")
+              {"Respuesta correcta — en LaTeX o texto (ej. \\frac{2}{3}x^{3} o 2*x)"}
               <input 
                 type="text"
                 value={newExExpr} 
                 onChange={e => setNewExExpr(e.target.value)}
-                placeholder="Expresión que valida el nodo..."
+                placeholder="Expresión que valida el ejercicio..."
                 style={{ fontFamily: "'JetBrains Mono', monospace", padding: "10px", borderRadius: "8px", background: "var(--panel)", border: "1px solid var(--line)", color: "var(--text)" }}
               />
+              <MathPreview input={newExExpr} />
             </label>
             <button 
               type="submit" 

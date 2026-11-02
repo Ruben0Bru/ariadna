@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import katex from "katex";
+import { latexToMathjs } from "@/lib/latexToMath";
 import "katex/dist/katex.min.css";
 
 interface MathPreviewProps {
@@ -9,8 +10,10 @@ interface MathPreviewProps {
 }
 
 /**
- * Renders a live KaTeX preview of a mathjs-style expression while the student types.
- * Converts common student notation (^, *, parentheses) to LaTeX.
+ * Vista previa en vivo con KaTeX mientras el estudiante escribe.
+ *  - Si escribe LaTeX (\\frac{}{}, x^{2}, \\sin x…) se muestra tal cual.
+ *  - Si escribe notación simple (3*x^2, sqrt(x)) se convierte a LaTeX.
+ * Además avisa si la expresión todavía no se puede interpretar al verificar.
  */
 function toLatex(expr: string): string {
   if (!expr.trim()) return "";
@@ -43,7 +46,11 @@ function toLatex(expr: string): string {
   // sqrt(expr) → \sqrt{expr}
   s = s.replace(/sqrt\(([^)]+)\)/g, (_, inner) => `\\sqrt{${toLatex(inner)}}`);
 
+  // Funciones trigonométricas / logaritmos: sen(x) → \sin(x), sec(x) → \sec(x)…
+  s = s.replace(/\b(sen|sin|cos|tan|sec|csc|cot|ln|log|exp)\b/g, (m) => "\\" + (m === "sen" ? "sin" : m));
+
   // Greek letters
+  s = s.replace(/\btheta\b/g, "\\theta");
   s = s.replace(/\bpi\b/g, "\\pi");
   s = s.replace(/\be\b/g, "e");
 
@@ -51,6 +58,19 @@ function toLatex(expr: string): string {
   s = s.replace(/\s+/g, " ").trim();
 
   return s;
+}
+
+function looksLikeLatex(s: string): boolean {
+  return /[\\{}]/.test(s);
+}
+
+function canInterpret(s: string): boolean {
+  try {
+    latexToMathjs(s);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export default function MathPreview({ input }: MathPreviewProps) {
@@ -65,7 +85,7 @@ export default function MathPreview({ input }: MathPreviewProps) {
       return;
     }
 
-    const latex = toLatex(input);
+    const latex = looksLikeLatex(input) ? input.trim().replace(/^\$+|\$+$/g, "") : toLatex(input);
     try {
       katex.render(latex, containerRef.current, {
         throwOnError: false,
@@ -90,6 +110,11 @@ export default function MathPreview({ input }: MathPreviewProps) {
         <div className="math-preview-error">Expresión incompleta…</div>
       ) : (
         <div ref={containerRef} className="math-preview-render" />
+      )}
+      {!canInterpret(input) && (
+        <div className="math-preview-warning">
+          ⚠ Aún no se puede interpretar: revisa que las llaves <code>{"{ }"}</code> y los paréntesis estén cerrados.
+        </div>
       )}
     </div>
   );

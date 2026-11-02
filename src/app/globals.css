@@ -1375,3 +1375,16 @@ code {
   }
 }
 
+
+
+/* ── Barra de símbolos LaTeX y avisos de la vista previa ── */
+.latex-toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+.latex-btn {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
+  padding: 5px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text);
+}
+.latex-btn:hover:not(:disabled) { border-color: var(--thread); color: var(--thread); }
+.latex-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.math-preview-warning { margin-top: 8px; font-size: 0.8rem; color: #e0a458; }
+.math-preview-warning code { background: rgba(255,255,255,0.06); padding: 0 4px; border-radius: 4px; }

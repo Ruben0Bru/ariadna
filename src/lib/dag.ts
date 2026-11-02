@@ -19,6 +19,11 @@ export const DAG: Record<string, { label: string; unit: string; prereqs: string[
   regla_producto:      { label: "Regla del producto",     unit: "Unidad 3 — §3.3", prereqs: ["regla_potencia"] },
   regla_cociente:      { label: "Regla del cociente",     unit: "Unidad 3 — §3.4", prereqs: ["regla_producto"] },
   regla_cadena:        { label: "Regla de la cadena",     unit: "Unidad 3 — §3.5", prereqs: ["regla_potencia"] },
+  // Práctica del profesor (prerrequisitos = solo recomendaciones, nunca bloquean)
+  deriv_basicas:            { label: "Derivadas básicas",          unit: "Práctica del profesor", prereqs: ["definicion_derivada"] },
+  exponentes_fraccionarios: { label: "Exponentes fraccionarios",   unit: "Práctica del profesor", prereqs: ["deriv_basicas", "leyes_exponentes"] },
+  simplificar_derivar:      { label: "Simplifica y deriva",        unit: "Práctica del profesor", prereqs: ["exponentes_fraccionarios", "factorizacion"] },
+  derivadas_trig:           { label: "Derivadas trigonométricas",  unit: "Práctica del profesor", prereqs: ["regla_producto", "regla_cociente"] },
 };
 
 // Orden topológico del grafo (de fácil a difícil)
@@ -30,6 +35,10 @@ export const DAG_ORDER = [
   "regla_producto",
   "regla_cociente",
   "regla_cadena",
+  "deriv_basicas",
+  "exponentes_fraccionarios",
+  "simplificar_derivar",
+  "derivadas_trig",
 ];
 
 // Nodo de entrada por defecto al iniciar sesión
@@ -59,7 +68,7 @@ export const CONCEPTS: Record<string, NodeConcept> = {
     example: `**Simplifica:** $x^3 \\cdot x^4 \\div x^2$
 
 $$x^3 \\cdot x^4 \\div x^2 = x^{3+4-2} = x^5$$`,
-    tip: "Escribe tu respuesta simplificada, por ejemplo: x^7 o x^(1/2)",
+    tip: "Escribe tu respuesta en LaTeX. Ej: x^{7} o x^{\\frac{1}{2}}",
   },
 
   factorizacion: {
@@ -72,7 +81,7 @@ $$\\boxed{a(b+c) = ab + ac}$$`,
     example: `**Expande:** $(3x - 2)^2$
 
 $$(3x)^2 - 2(3x)(2) + 4 = 9x^2 - 12x + 4$$`,
-    tip: "Escribe la forma expandida: ej. 9*x^2 - 12*x + 4",
+    tip: "Escribe la forma expandida en LaTeX. Ej: 9x^{2} - 12x + 4",
   },
 
   definicion_derivada: {
@@ -89,7 +98,7 @@ Intuitivamente: si $f(x)$ describe posición, $f'(x)$ describe velocidad. Si des
     example: `**Calcula $f'(x)$ si $f(x) = x^2$ usando la definición:**
 
 $$f'(x) = \\lim_{h\\to 0}\\frac{(x+h)^2 - x^2}{h} = \\lim_{h\\to 0}\\frac{2xh+h^2}{h} = 2x$$`,
-    tip: "Para estas preguntas, escribe la derivada simbólica: ej. 2*x o simplemente 3",
+    tip: "Escribe la derivada simbólica en LaTeX. Ej: 2x o simplemente 3",
   },
 
   regla_potencia: {
@@ -107,7 +116,7 @@ Se aplica **término a término** en cualquier polinomio.`,
     example: `**Deriva** $f(x) = 5x^4 - 3x^2 + 7$
 
 $$f'(x) = 5 \\cdot 4x^3 - 3 \\cdot 2x + 0 = 20x^3 - 6x$$`,
-    tip: "Usa ^ para potencias y * para multiplicar. Ej: 20*x^3 - 6*x",
+    tip: "Escribe en LaTeX con ^{ } para potencias. Ej: 20x^{3} - 6x",
   },
 
   regla_producto: {
@@ -123,7 +132,7 @@ $u = x^2 \\Rightarrow u' = 2x$
 $v = x+3 \\Rightarrow v' = 1$
 
 $$f'(x) = 2x(x+3) + x^2(1) = 2x^2+6x+x^2 = 3x^2+6x$$`,
-    tip: "Desarrolla y simplifica el resultado. Ej: 3*x^2 + 6*x",
+    tip: "Desarrolla y simplifica el resultado. Ej: 3x^{2} + 6x",
   },
 
   regla_cociente: {
@@ -138,7 +147,7 @@ $$\\boxed{\\left[\\frac{u}{v}\\right]' = \\frac{u'v - uv'}{v^2}}$$
 $u = x^2, u' = 2x \\quad v = x+1, v' = 1$
 
 $$f'(x) = \\frac{2x(x+1) - x^2(1)}{(x+1)^2} = \\frac{x^2+2x}{(x+1)^2}$$`,
-    tip: "Expande el numerador si es posible y simplifica. Ej: (x^2+2*x)/(x+1)^2",
+    tip: "Puedes dejar un cociente. Ej: \\frac{x^{2}+2x}{(x+1)^{2}}",
   },
 
   regla_cadena: {
@@ -157,11 +166,80 @@ $$\\boxed{f'(x) = g'(h(x)) \\cdot h'(x)}$$
 - Interior: $3x+2 \\Rightarrow 3$
 
 $$f'(x) = 4(3x+2)^3 \\cdot 3 = 12(3x+2)^3$$`,
-    tip: "Escribe el resultado final: ej. 12*(3*x+2)^3",
+    tip: "Escribe el resultado final. Ej: 12(3x+2)^{3}",
   },
 };
 
 // ── Ejercicios ────────────────────────────────────────────────────────────────
+// ── Tarjetas de concepto: Práctica del profesor ──────────────────────────────
+Object.assign(CONCEPTS, {
+  deriv_basicas: {
+    title: "Derivadas básicas: constante, potencia y suma",
+    body: `Estas reglas bastan para derivar cualquier polinomio, **término a término**:
+
+| Regla | Fórmula |
+|-------|---------|
+| Constante | $\\dfrac{d}{dx}[c] = 0$ |
+| Potencia | $\\dfrac{d}{dx}[x^n] = n\\,x^{n-1}$ |
+| Constante por función | $\\dfrac{d}{dx}[k\\,f(x)] = k\\,f'(x)$ |
+| Suma y resta | $\\dfrac{d}{dx}[f \\pm g] = f' \\pm g'$ |`,
+    example: `**Deriva** $f(x) = 4x^3 - 5x + 2$
+
+$$f'(x) = 4\\cdot 3x^2 - 5\\cdot 1 + 0 = 12x^2 - 5$$`,
+    tip: "Escribe la derivada en LaTeX. Ej: 12x^{2} - 5. Si la variable no es x (t, p, w…), úsala en tu respuesta.",
+  },
+
+  exponentes_fraccionarios: {
+    title: "Raíces, fracciones y exponentes negativos o fraccionarios",
+    body: `Antes de derivar, escribe todo como **potencia de la variable**:
+
+| Expresión | Como potencia |
+|-----------|---------------|
+| $\\sqrt{x}$ | $x^{1/2}$ |
+| $\\sqrt[n]{x^m}$ | $x^{m/n}$ |
+| $\\dfrac{1}{x^n}$ | $x^{-n}$ |
+| $\\dfrac{k}{\\sqrt{x}}$ | $k\\,x^{-1/2}$ |
+
+Luego aplica la regla de la potencia $\\dfrac{d}{dx}[x^n] = n\\,x^{n-1}$, también cuando $n$ es negativo o fraccionario.`,
+    example: `**Deriva** $f(x) = \\dfrac{3}{\\sqrt{x}}$
+
+$$f(x) = 3x^{-1/2} \\;\\Rightarrow\\; f'(x) = 3\\cdot\\left(-\\tfrac12\\right)x^{-3/2} = -\\tfrac32\\,x^{-3/2}$$`,
+    tip: "Ej: -\\frac{3}{2}x^{-3/2}. Usa el botón a/b para las fracciones y xⁿ para los exponentes.",
+  },
+
+  simplificar_derivar: {
+    title: "Simplifica primero y luego deriva",
+    body: `Cuando la función es un **producto** o un **cociente sencillo**, conviene simplificarla antes de derivar:
+
+- Multiplica: $a(b+c) = ab + ac$ y usa $x^a\\cdot x^b = x^{a+b}$.
+- Divide término a término: $\\dfrac{a+b}{c} = \\dfrac{a}{c} + \\dfrac{b}{c}$.
+
+Así queda una suma de potencias y basta la regla de la potencia.`,
+    example: `**Deriva** $f(x) = x\\,(3x^2 - 10x + 7)$
+
+$$f(x) = 3x^3 - 10x^2 + 7x \\;\\Rightarrow\\; f'(x) = 9x^2 - 20x + 7$$`,
+    tip: "Simplifica primero en papel. Ej: 9x^{2} - 20x + 7",
+  },
+
+  derivadas_trig: {
+    title: "Derivadas de funciones trigonométricas",
+    body: `Tabla básica (se combina con las reglas del producto y del cociente, y con $\\dfrac{d}{dx}[e^x] = e^x$):
+
+| Función | Derivada |
+|---------|----------|
+| $\\operatorname{sen} x$ | $\\cos x$ |
+| $\\cos x$ | $-\\operatorname{sen} x$ |
+| $\\tan x$ | $\\sec^2 x$ |
+| $\\sec x$ | $\\sec x\\,\\tan x$ |
+| $\\cot x$ | $-\\csc^2 x$ |
+| $\\csc x$ | $-\\csc x\\,\\cot x$ |`,
+    example: `**Deriva** $y = x\\,\\operatorname{sen} x$
+
+$$y' = 1\\cdot\\operatorname{sen} x + x\\cos x = \\operatorname{sen} x + x\\cos x$$`,
+    tip: "Usa los botones sen, cos, tan, sec, csc, cot. Ej: \\sin x + x\\cos x. La variable puede ser \\theta o t.",
+  },
+});
+
 export interface Exercise {
   id: number;
   prompt: string;

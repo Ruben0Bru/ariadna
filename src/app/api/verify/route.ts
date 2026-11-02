@@ -10,9 +10,10 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { evaluate } from "mathjs";
 import { EXERCISES } from "@/lib/dag";
 import { getStudentAuth, getServerSupabaseConfig } from "@/lib/auth";
+import { latexToMathjs } from "@/lib/latexToMath";
 
 const MASTERY_THRESHOLD = 3;
-const MAX_ANSWER_LENGTH = 200;
+const MAX_ANSWER_LENGTH = 300;
 
 // Puntos de prueba: se usan solo los que son reales en AMBAS expresiones, así
 // ln(x-3), sqrt(x) o similares también se pueden comparar.
@@ -35,7 +36,8 @@ function toMathjs(expr: string): string {
     .replace(/[·×⋅]/g, "*")
     .replace(/÷/g, "/")
     .replace(/²/g, "^2")
-    .replace(/³/g, "^3");
+    .replace(/³/g, "^3")
+    .replace(/[θϑ]/g, "theta");
 
   p = p.replace(/\*\*/g, "^");
 
@@ -45,15 +47,30 @@ function toMathjs(expr: string): string {
   p = p.replace(/\\/g, "");
 
   // Notación en español / alias frecuentes
-  p = p.replace(/\bsen\(/gi, "sin(").replace(/\btg\(/gi, "tan(").replace(/\bln\(/gi, "log(");
+  p = p.replace(/\bsen\b/gi, "sin").replace(/\btg\b/gi, "tan").replace(/\bln\b/gi, "log");
+
+  // sin^2(x) → (sin(x))^2  (muy común al escribir potencias de funciones trigonométricas)
+  p = p.replace(/\b(sin|cos|tan|sec|csc|cot)\^(\d+)\s*\(([^()]*)\)/g, "($1($3))^$2");
 
   return p;
+}
+
+// Primero se intenta interpretar como LaTeX / notación matemática; si no se logra,
+// se usa el conversor anterior (texto plano estilo math.js).
+function prepare(expr: string): string {
+  try {
+    return latexToMathjs(expr);
+  } catch {
+    return toMathjs(expr);
+  }
 }
 
 function evalAt(expr: string, val: number, variable: string = "x"): number | null {
   try {
     const scope: Record<string, number> = {};
     scope[variable] = val;
+    // Algunos ejercicios incluyen una constante literal "c" (p. ej. y = c·cos t + …).
+    if (variable !== "c") scope.c = 1.7;
     const result = evaluate(expr, scope);
     const n = typeof result === "number" ? result : (result as { toNumber?: () => number }).toNumber?.();
     if (typeof n !== "number" || !isFinite(n)) return null;
@@ -203,8 +220,8 @@ export async function POST(req: NextRequest) {
   }
 
   const variable = ex.variable || "x";
-  const expectedExprMathjs = toMathjs(ex.correct_expr);
-  const studentExprMathjs = toMathjs(studentAnswer);
+  const expectedExprMathjs = prepare(ex.correct_expr);
+  const studentExprMathjs = prepare(studentAnswer);
 
   let isCorrect = false;
   let errorType: string | null = null;
@@ -222,13 +239,13 @@ export async function POST(req: NextRequest) {
     } else {
       isCorrect = numericallyEqual(studentExprMathjs, expectedExprMathjs, variable);
       if (!isCorrect) {
-        errorType = classifyError(studentExprMathjs, expectedExprMathjs, toMathjs(ex.correct_expr), variable);
+        errorType = classifyError(studentExprMathjs, expectedExprMathjs, prepare(ex.correct_expr), variable);
       }
     }
   } else {
     isCorrect = numericallyEqual(studentExprMathjs, expectedExprMathjs, variable);
     if (!isCorrect) {
-      errorType = classifyError(studentExprMathjs, expectedExprMathjs, toMathjs(ex.correct_expr), variable);
+      errorType = classifyError(studentExprMathjs, expectedExprMathjs, prepare(ex.correct_expr), variable);
     }
   }
 
